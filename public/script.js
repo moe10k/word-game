@@ -103,6 +103,12 @@ socket.on('gameWin', (winnerUsername) => {
 });
 
 
+socket.on('invalidWord', (message) => {
+    alert(message); // Display the error message
+});
+
+
+
 // Update UI with player status
 function updatePlayerList(playerStatus) {
     const playerListElement = document.getElementById('playerList');

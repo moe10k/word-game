@@ -2,6 +2,7 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const axios = require('axios');
 
 // Initialize Express and HTTP server
 const app = express();
@@ -39,20 +40,23 @@ io.on('connection', (socket) => {
     });
 
     // Handle guess submissions
-    socket.on('guess', (word) => {
+    socket.on('guess', async (word) => {
         if (socket.username) {
-            if (isValidGuess(word, currentLetters)) {
+            const isValidWord = await checkWordValidity(word);
+            if (isValidWord && isValidGuess(word, currentLetters)) {
                 scores[socket.username] += 1;
                 currentLetters = generateRandomLetters();
             } else {
+                socket.emit('invalidWord', 'The word is not valid');
                 lives[socket.username] -= 1; // Decrement a life for wrong guess
                 if (lives[socket.username] <= 0) {
                     // Handle the situation when player loses all lives
                     // e.g., emit a 'gameOver' event to this player
                     socket.emit('gameOver');
+                    console.log(`${socket.username} has 0 lives`);
                 }
             }
-            if (scores[socket.username] >= 1) {
+            if (scores[socket.username] >= 3) {
                 io.emit('gameWin', socket.username); // Emit the winner's username
                 console.log(`${socket.username} Won!`);
             }
@@ -86,6 +90,19 @@ io.on('connection', (socket) => {
 // Start the server on port 3000
 const PORT = 3000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+
+async function checkWordValidity(word) {
+    try {
+        const response = await axios.get(`https://api.datamuse.com/words?sp=${word}&md=d`);
+        // If the word exists, the response will not be empty
+        return response.data.length > 0 && response.data[0].word === word;
+    } catch (error) {
+        console.error('Error validating word:', error);
+        return false;
+    }
+}
+
 
 // Check if all players are ready and start the game
 function checkAllPlayersReady() {
