@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Letter Guess Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="scoreBoard"></div>
+    
+
+    <div id="usernameScreen">
+        <input type="text" id="usernameInput" placeholder="Enter your username">
+        <button id="joinGame">Join Game</button>
+        <button id="readyButton" style="display: none;">Ready</button>
+        <div id="playerList"></div>
+
+    </div>
+
+    <div id="game" style="display: none;">
+        <div id="letters">Letters: <span id="letterDisplay"></span></div>
+        <input type="text" id="wordGuess" placeholder="Enter your guess">
+        <button id="submitGuess">Submit Guess</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
