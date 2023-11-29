@@ -140,3 +140,5 @@ function updateAllPlayers() {
         lives: lives // Send updated lives to all clients
     });
 }
+
+//test comment
