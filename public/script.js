@@ -144,3 +144,29 @@ function updatePlayerList(playerStatus) {
         playerListElement.appendChild(playerElement); // Add each player to the list
     });
 }
+
+
+function updateLivesDisplay(lives) {
+    const livesDisplay = document.getElementById('livesDisplay');
+    livesDisplay.innerHTML = ''; // Clear existing lives display
+
+    for (const [username, lifeCount] of Object.entries(lives)) {
+        const playerLivesElement = document.createElement('div');
+        playerLivesElement.textContent = `${username}: `;
+
+        // Add heart images
+        for (let i = 0; i < lifeCount; i++) {
+            const fullHeart = document.createElement('span');
+            fullHeart.classList.add('heart', 'full-heart');
+            playerLivesElement.appendChild(fullHeart);
+        }
+
+        for (let i = lifeCount; i < 3; i++) { // Assuming 3 is the max number of lives
+            const emptyHeart = document.createElement('span');
+            emptyHeart.classList.add('heart', 'empty-heart');
+            playerLivesElement.appendChild(emptyHeart);
+        }
+
+        livesDisplay.appendChild(playerLivesElement);
+    }
+}
