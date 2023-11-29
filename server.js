@@ -85,6 +85,11 @@ io.on('connection', (socket) => {
             updatePlayerStatus();
         }
     });
+        socket.on('typing', ({ username, text }) => {
+            // Broadcast the typing event to all other clients
+            socket.broadcast.emit('playerTyping', { username, text });
+
+    });
 });
 
 // Start the server on port 3000
