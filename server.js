@@ -18,10 +18,16 @@ let currentLetters = generateRandomLetters();
 let scores = {}; // Stores players' scores
 let userMap = {}; // Maps socket IDs to user info
 let lives = {}; // Stores players' lives
+let totalPlayers = 0;
+let readyPlayers = 0;
 
 // Handle new socket connections
 io.on('connection', (socket) => {
     console.log(`A new player connected: ${socket.id}`);
+
+    totalPlayers++;
+    updateReadinessStatus();
+
 
     // Handle username setting
     socket.on('setUsername', (username) => {
@@ -67,6 +73,8 @@ io.on('connection', (socket) => {
     // Handle player ready status
     socket.on('playerReady', () => {
         console.log(`${socket.username} is Ready!`);
+        readyPlayers++;
+        updateReadinessStatus();
         if (userMap[socket.id]) {
             userMap[socket.id].ready = true;
             scores[socket.username] = scores[socket.username] || 0; // Initialize score if not set
@@ -75,9 +83,20 @@ io.on('connection', (socket) => {
         }
     });
 
+
+    socket.on('playerNotReady', () => {
+        readyPlayers--;
+        updateReadinessStatus();
+    });
+
     // Handle player disconnection
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.username}`);
+        totalPlayers--;
+        if (socket.isReady) {
+            readyPlayers--;
+        }
+        updateReadinessStatus();
         if (socket.username) {
             delete scores[socket.username];
             delete userMap[socket.id];
@@ -90,6 +109,10 @@ io.on('connection', (socket) => {
             socket.broadcast.emit('playerTyping', { username, text });
 
     });
+
+    function updateReadinessStatus() {
+        io.emit('readinessUpdate', { totalPlayers, readyPlayers });
+    }
 });
 
 // Start the server on port 3000

@@ -128,6 +128,11 @@ socket.on('invalidWord', (message) => {
 });
 
 
+socket.on('readinessUpdate', ({ totalPlayers, readyPlayers }) => {
+    const readinessFraction = `${readyPlayers}/${totalPlayers}`;
+    document.getElementById('readinessFraction').textContent = readinessFraction;
+});
+
 
 // Update UI with player status
 function updatePlayerList(playerStatus) {
