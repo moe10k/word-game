@@ -35,6 +35,26 @@ joinGameButton.addEventListener('click', () => {
     }
 });
 
+
+// When the player types in their guess
+wordGuess.addEventListener('input', () => {
+    const text = wordGuess.value.trim();
+    // Emit the typing event with username and text
+    socket.emit('typing', { username: myUsername, text });
+});
+
+// Handle incoming typing events
+socket.on('playerTyping', ({ username, text }) => {
+    let typingDisplayElement = document.getElementById(`typingDisplay_${username}`);
+    if (!typingDisplayElement) {
+        typingDisplayElement = document.createElement('div');
+        typingDisplayElement.id = `typingDisplay_${username}`;
+        document.getElementById('playerTypingStatus').appendChild(typingDisplayElement);
+    }
+    typingDisplayElement.textContent = `${username} is typing: ${text}`;
+});
+
+
 // Handle username error event from server
 socket.on('usernameError', (message) => {
     alert(message); // Show error message to the user
