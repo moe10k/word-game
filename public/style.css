@@ -1,8 +1,91 @@
+/* Overall body styling */
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Arial', sans-serif;
+    background-color: #f0f0f0;
+    color: #333;
     text-align: center;
+    padding: 20px;
 }
 
-#game {
-    margin-top: 50px;
+/* Styling for the main game and username screens */
+#usernameScreen, #game {
+    margin: 20px auto;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    width: 80%;
+    max-width: 500px;
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Input fields styling */
+input[type="text"] {
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    width: 80%;
+}
+
+/* Button styling */
+button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    margin: 10px 0;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+/* Scoreboard and player list styling */
+#scoreBoard, #playerList {
+    text-align: left;
+    margin-top: 20px;
+}
+
+#playerReadinessStatus {
+    font-size: 1.1em;
+    margin-top: 10px;
+}
+
+/* Letter display and guessing area styling */
+#letters {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+/* Typing status display */
+#playerTypingStatus div {
+    background-color: #eee;
+    padding: 5px;
+    margin-top: 5px;
+    border-radius: 3px;
+}
+
+
+#livesDisplay {
+    margin-top: 20px;
+}
+
+.heart {
+    width: 20px; /* Adjust as needed */
+    height: 20px; /* Adjust as needed */
+    background-size: cover;
+    display: inline-block;
+}
+
+.full-heart {
+    background-image: url('images/fullheart.png'); /* Replace with your full heart image path */
+}
+
+.empty-heart {
+    background-image: url('images/emptyheart.png'); /* Replace with your empty heart image path */
 }
