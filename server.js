@@ -1,115 +1,52 @@
-// Import required modules
+// Required modules import
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const axios = require('axios');
 
-// Initialize Express and HTTP server
+// Express and HTTP server initialization
 const app = express();
 const server = http.createServer(app);
-// Initialize Socket.IO with the HTTP server
-const io = socketIo(server);
+const io = socketIo(server);  // Socket.IO with the HTTP server
 
-// Serve static files from the 'public' directory
+// Serve static files from 'public' directory
 app.use(express.static('public'));
 
-// Initialize game state variables
+// Game state variables
 let currentLetters = generateRandomLetters();
-let scores = {}; // Stores players' scores
-let userMap = {}; // Maps socket IDs to user info
-let lives = {}; // Stores players' lives
+let scores = {};     // Player scores
+let userMap = {};    // Maps socket IDs to user info
+let lives = {};      // Player lives
 let totalPlayers = 0;
 let readyPlayers = 0;
 
-// Handle new socket connections
+// New socket connection handler
 io.on('connection', (socket) => {
-    console.log(`A new player connected: ${socket.id}`);
-
+    // Player connection logic
+    console.log(`New player connected: ${socket.id}`);
     totalPlayers++;
     updateReadinessStatus();
 
 
-    // Handle username setting
-    socket.on('setUsername', (username) => {
-        // Prevent duplicate usernames
-        if (Object.values(userMap).some(user => user.name === username)) {
-            socket.emit('usernameError', 'Username already taken');
-            return;
-        }
+    // Username setting event
+    socket.on('setUsername', setUsernameHandler(socket));
 
-        // Update userMap and scores
-        socket.username = username;
-        lives[username] = 3; // Initialize lives when player joins
-        userMap[socket.id] = { name: username, ready: false };
-        updatePlayerStatus();
-        console.log(`Username set for ${socket.id}: ${username}`);
-    });
+    // Guess submission event
+    socket.on('guess', guessHandler(socket));
 
-    // Handle guess submissions
-    socket.on('guess', async (word) => {
-        if (socket.username) {
-            const isValidWord = await checkWordValidity(word);
-            if (isValidWord && isValidGuess(word, currentLetters)) {
-                scores[socket.username] += 1;
-                currentLetters = generateRandomLetters();
-            } else {
-                socket.emit('invalidWord', 'The word is not valid');
-                lives[socket.username] -= 1; // Decrement a life for wrong guess
-                if (lives[socket.username] <= 0) {
-                    // Handle the situation when player loses all lives
-                    // e.g., emit a 'gameOver' event to this player
-                    socket.emit('gameOver');
-                    console.log(`${socket.username} has 0 lives`);
-                }
-            }
-            if (scores[socket.username] >= 3) {
-                io.emit('gameWin', socket.username); // Emit the winner's username
-                console.log(`${socket.username} Won!`);
-            }
-            updateAllPlayers();
-        }
-    });
+    // Player ready status event
+    socket.on('playerReady', playerReadyHandler(socket));
 
-    // Handle player ready status
-    socket.on('playerReady', () => {
-        console.log(`${socket.username} is Ready!`);
-        readyPlayers++;
-        updateReadinessStatus();
-        if (userMap[socket.id]) {
-            userMap[socket.id].ready = true;
-            scores[socket.username] = scores[socket.username] || 0; // Initialize score if not set
-            updatePlayerStatus();
-            checkAllPlayersReady();
-        }
-    });
+    // Player not ready event
+    socket.on('playerNotReady', playerNotReadyHandler(socket));
 
+    // Player disconnection event
+    socket.on('disconnect', playerDisconnectHandler(socket));
 
-    socket.on('playerNotReady', () => {
-        readyPlayers--;
-        updateReadinessStatus();
-    });
+    // Typing event
+    socket.on('typing', typingHandler(socket));
 
-    // Handle player disconnection
-    socket.on('disconnect', () => {
-        console.log(`Player disconnected: ${socket.username}`);
-        totalPlayers--;
-        if (socket.isReady) {
-            readyPlayers--;
-        }
-        updateReadinessStatus();
-        if (socket.username) {
-            delete scores[socket.username];
-            delete userMap[socket.id];
-            updateAllPlayers();
-            updatePlayerStatus();
-        }
-    });
-        socket.on('typing', ({ username, text }) => {
-            // Broadcast the typing event to all other clients
-            socket.broadcast.emit('playerTyping', { username, text });
-
-    });
-
+    // Readiness status update function
     function updateReadinessStatus() {
         io.emit('readinessUpdate', { totalPlayers, readyPlayers });
     }
@@ -185,3 +122,97 @@ function updateAllPlayers() {
         lives: lives // Send updated lives to all clients
     });
 }
+
+
+
+
+
+
+
+
+function setUsernameHandler(socket) {
+    return function(username) {
+        if (!username || typeof username !== 'string' || username.length < 3 || username.length > 20) {
+            socket.emit('usernameError', 'Invalid username. Must be 3-20 characters long.');
+            return;
+        }
+        if (Object.values(userMap).some(user => user.name === username)) {
+            socket.emit('usernameError', 'Username already taken');
+            return;
+        }
+        socket.username = username;
+        lives[username] = 3;
+        userMap[socket.id] = { name: username, ready: false };
+        updatePlayerStatus();
+        console.log(`Username set for ${socket.id}: ${username}`);
+    };
+}
+
+function guessHandler(socket) {
+    return async function(word) {
+        if (!word || typeof word !== 'string' || word.length < 1) {
+            socket.emit('invalidWord', 'Invalid guess.');
+            return;
+        }
+        if (socket.username) {
+            const isValidWord = await checkWordValidity(word);
+            if (isValidWord && isValidGuess(word, currentLetters)) {
+                scores[socket.username] = (scores[socket.username] || 0) + 1;
+                currentLetters = generateRandomLetters();
+            } else {
+                socket.emit('invalidWord', 'The word is not valid');
+                lives[socket.username] = (lives[socket.username] || 0) - 1;
+                if (lives[socket.username] <= 0) {
+                    socket.emit('gameOver');
+                    console.log(`${socket.username} has 0 lives`);
+                }
+            }
+            if (scores[socket.username] >= 3) {
+                io.emit('gameWin', socket.username);
+                console.log(`${socket.username} Won!`);
+            }
+            updateAllPlayers();
+        }
+    };
+}
+
+function playerReadyHandler(socket) {
+    return function() {
+        console.log(`${socket.username} is Ready!`);
+        readyPlayers++;
+        //updateReadinessStatus();
+        if (userMap[socket.id]) {
+            userMap[socket.id].ready = true;
+            scores[socket.username] = scores[socket.username] || 0; // Initialize score if not set
+            updatePlayerStatus();
+            checkAllPlayersReady();
+        }
+}}
+
+function playerNotReadyHandler(socket) {
+    return function() {
+        readyPlayers--;
+        updateReadinessStatus();
+}}
+
+function playerDisconnectHandler(socket) {
+    return function() {
+        console.log(`Player disconnected: ${socket.username}`);
+        totalPlayers--;
+        if (socket.isReady) {
+            readyPlayers--;
+        }
+        //updateReadinessStatus();
+        if (socket.username) {
+            delete scores[socket.username];
+            delete userMap[socket.id];
+            updateAllPlayers();
+            updatePlayerStatus();
+        }
+}}
+
+function typingHandler(socket) {
+    // Broadcast the typing event to all other clients
+    return function({ username, text }) {
+        socket.broadcast.emit('playerTyping', { username, text });
+}}
