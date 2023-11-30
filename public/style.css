@@ -1,13 +1,23 @@
 body {
     font-family: Arial, sans-serif;
-    background-color: #f0f0f0;
+    background-color: white;
     text-align: center;
     padding: 20px;
 }
 
-#scoreBoard, #livesDisplay, #playerList {
-    margin-bottom: 20px;
+#leftSidebar {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-right: 20px; /* Spacing between sidebar and main content */
 }
+
+#scoreBoard, #livesDisplay{
+
+    width: 200px; /* Adjust the width as needed */
+    overflow: hidden; /* Hide overflow content */
+}
+
 
 #usernameScreen, #game {
     margin-top: 20px;
@@ -35,12 +45,17 @@ button:hover {
 }
 
 .player-score {
-    margin-bottom: 10px;
+    font-size: 16px;
+    color: white;
+    padding: 10px 20px;
+    margin: 5px;
+    text-shadow: 1px 1px 2px #000;
+    margin-bottom: 20px;
 }
 
 .hearts-container {
     display: inline-block;
-    margin-left: 10px;
+    vertical-align: middle;
 }
 
 .heart {
@@ -48,17 +63,24 @@ button:hover {
     width: 20px;
     height: 20px;
     background-size: cover;
+    vertical-align: middle;
+    margin-right: 4px; /* Add some right margin to each heart */
 }
 
 .full-heart {
     background-image: url('images/fullheart.png'); /* Replace with your full heart image path */
+    background-color: transparent; /* Explicitly set background color to transparent */
+    background-size: contain; /* Adjust if necessary */
+    background-repeat: no-repeat;
 }
 
 .empty-heart {
     background-image: url('images/emptyheart.png'); /* Replace with your empty heart image path */
+    background-color: transparent; /* Explicitly set background color to transparent */
+    background-size: contain; /* Adjust if necessary */
+    background-repeat: no-repeat;
 }
 
 .typing-status {
     font-style: italic;
-    color: #666;
 }

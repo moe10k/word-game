@@ -135,32 +135,38 @@ function updateScoreBoard(scores, lives) {
         playerScoreElement.classList.add('player-score');
         playerScoreElement.id = `score_${username}`;
 
-        // Display only the username and score
-        playerScoreElement.textContent = `${username}: ${score}`;
-
-        // Create a container for the heart images
+        // Create a container for the heart images (lives)
         const heartsContainer = document.createElement('div');
         heartsContainer.classList.add('hearts-container');
+        const playerLives = lives[username] || 0; // Get the lives of the player
 
-        // Get the lives of the player, defaulting to 0 if not found
-        const playerLives = lives[username] || 0;
-
-        // Add heart images
+        // Add heart images for lives
         for (let i = 0; i < playerLives; i++) {
             const fullHeart = document.createElement('span');
             fullHeart.classList.add('heart', 'full-heart');
             heartsContainer.appendChild(fullHeart);
         }
 
-        // Assuming 3 is the max number of lives, add empty hearts for the remaining lives
+        // Add empty hearts for the remaining lives
         for (let i = playerLives; i < 3; i++) {
             const emptyHeart = document.createElement('span');
             emptyHeart.classList.add('heart', 'empty-heart');
             heartsContainer.appendChild(emptyHeart);
         }
 
-        // Append the hearts container to the player's score element
+        // Append the hearts container (lives) first
         playerScoreElement.appendChild(heartsContainer);
+
+        // Add the player's name
+        const playerNameElement = document.createElement('span');
+        playerNameElement.textContent = ` ${username}`;
+        playerNameElement.classList.add('player-name');
+        playerScoreElement.appendChild(playerNameElement);
+
+        // Add the player's score
+        const playerScoreText = document.createElement('span');
+        playerScoreText.textContent = `: ${score}`;
+        playerScoreElement.appendChild(playerScoreText);
 
         // Add a placeholder for typing status
         const typingStatus = document.createElement('div');
@@ -172,5 +178,6 @@ function updateScoreBoard(scores, lives) {
         scoreBoard.appendChild(playerScoreElement);
     }
 }
+
 
 

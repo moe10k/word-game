@@ -7,8 +7,11 @@
 </head>
 <body>
 
-    <div id="scoreBoard"></div>
-    <div id="livesDisplay"></div>
+    <div id="leftSidebar">
+        <div id="scoreBoard"></div>
+        <div id="livesDisplay"></div>
+        <div id="playerTypingStatus"></div>
+    </div>
 
     <div id="usernameScreen">
         <input type="text" id="usernameInput" placeholder="Enter your username">
@@ -23,7 +26,6 @@
         <div id="letters">Letters: <span id="letterDisplay"></span></div>
         <input type="text" id="wordGuess" placeholder="Enter your guess">
         <button id="submitGuess">Submit Guess</button>
-        <div id="playerTypingStatus"></div> <!-- New element for showing typing status -->
         <div id="player-statuses">
             <!-- Player statuses will be dynamically inserted here -->
           </div>
