@@ -77,32 +77,13 @@ socket.on('gameUpdate', data => {
     }
     letterDisplay.textContent = data.letters; // Display current letters for guessing
     updateScoreBoard(data.scores, data.lives); // Now also passing the lives data
-    updateLivesDisplay(data.lives);
 });
 
-// Update the score board with current scores
-function updateScoreBoard(scores, lives) {
-    scoreBoard.innerHTML = ''; // Clear existing scores
-    for (const [username, score] of Object.entries(scores)) {
-        const scoreElement = document.createElement('div');
-        const playerLives = lives[username] || 0; // Get the lives of the player, defaulting to 0 if not found
-        scoreElement.textContent = `${username}: ${score} (Lives: ${playerLives})`; // Display username, score, and lives
-        scoreBoard.appendChild(scoreElement); // Add to score board
-    }
-}
 
 // Listen for player status update from server
 socket.on('playerStatusUpdate', (playerStatus) => {
     updatePlayerList(playerStatus); // Update player list UI
 });
-
-function updateLivesDisplay(lives) {
-    // Update the UI to show the remaining lives
-    // This assumes you have an element to display lives
-    const livesElement = document.getElementById('livesDisplay');
-    livesElement.textContent = `Lives: ${lives[socket.id] || 0}`;
-}
-
 
 
 socket.on('gameOver', () => {
@@ -146,27 +127,50 @@ function updatePlayerList(playerStatus) {
 }
 
 
-function updateLivesDisplay(lives) {
-    const livesDisplay = document.getElementById('livesDisplay');
-    livesDisplay.innerHTML = ''; // Clear existing lives display
+function updateScoreBoard(scores, lives) {
+    scoreBoard.innerHTML = ''; // Clear existing scores
 
-    for (const [username, lifeCount] of Object.entries(lives)) {
-        const playerLivesElement = document.createElement('div');
-        playerLivesElement.textContent = `${username}: `;
+    for (const [username, score] of Object.entries(scores)) {
+        const playerScoreElement = document.createElement('div');
+        playerScoreElement.classList.add('player-score');
+        playerScoreElement.id = `score_${username}`;
+
+        // Display only the username and score
+        playerScoreElement.textContent = `${username}: ${score}`;
+
+        // Create a container for the heart images
+        const heartsContainer = document.createElement('div');
+        heartsContainer.classList.add('hearts-container');
+
+        // Get the lives of the player, defaulting to 0 if not found
+        const playerLives = lives[username] || 0;
 
         // Add heart images
-        for (let i = 0; i < lifeCount; i++) {
+        for (let i = 0; i < playerLives; i++) {
             const fullHeart = document.createElement('span');
             fullHeart.classList.add('heart', 'full-heart');
-            playerLivesElement.appendChild(fullHeart);
+            heartsContainer.appendChild(fullHeart);
         }
 
-        for (let i = lifeCount; i < 3; i++) { // Assuming 3 is the max number of lives
+        // Assuming 3 is the max number of lives, add empty hearts for the remaining lives
+        for (let i = playerLives; i < 3; i++) {
             const emptyHeart = document.createElement('span');
             emptyHeart.classList.add('heart', 'empty-heart');
-            playerLivesElement.appendChild(emptyHeart);
+            heartsContainer.appendChild(emptyHeart);
         }
 
-        livesDisplay.appendChild(playerLivesElement);
+        // Append the hearts container to the player's score element
+        playerScoreElement.appendChild(heartsContainer);
+
+        // Add a placeholder for typing status
+        const typingStatus = document.createElement('div');
+        typingStatus.id = `typingDisplay_${username}`;
+        typingStatus.classList.add('typing-status');
+        playerScoreElement.appendChild(typingStatus);
+
+        // Add the player's score element to the scoreboard
+        scoreBoard.appendChild(playerScoreElement);
     }
 }
+
+
