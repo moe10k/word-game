@@ -25,6 +25,11 @@ readyButton.addEventListener('click', () => {
 // Handle "Join Game" button click
 joinGameButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
+    if (!username || username.length < 3 || username.length > 20) {
+        alert('Invalid username. Must be 3-20 characters long.');
+        return;
+    }
+
     if (username) {
         myUsername = username; // Store the username
         socket.emit('setUsername', username); // Send username to server
