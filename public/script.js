@@ -2,127 +2,47 @@
 const socket = io();
 
 // Retrieve HTML elements for game interaction
-const usernameScreen = document.getElementById('usernameScreen');
-const usernameInput = document.getElementById('usernameInput');
-const joinGameButton = document.getElementById('joinGame');
-const gameScreen = document.getElementById('game');
-
-// Elements for displaying game data
-const letterDisplay = document.getElementById('letterDisplay');
-const wordGuess = document.getElementById('wordGuess');
-const submitGuess = document.getElementById('submitGuess');
-const scoreBoard = document.getElementById('scoreBoard'); // Add this element in your HTML
-const readyButton = document.getElementById('readyButton'); // Add this element in your HTML
+const elements = {
+    usernameScreen: document.getElementById('usernameScreen'),
+    usernameInput: document.getElementById('usernameInput'),
+    joinGameButton: document.getElementById('joinGame'),
+    gameScreen: document.getElementById('game'),
+    letterDisplay: document.getElementById('letterDisplay'),
+    wordGuess: document.getElementById('wordGuess'),
+    submitGuess: document.getElementById('submitGuess'),
+    scoreBoard: document.getElementById('scoreBoard'),
+    readyButton: document.getElementById('readyButton'),
+    playerTypingStatus: document.getElementById('playerTypingStatus'),
+    readinessFraction: document.getElementById('readinessFraction'),
+    playerList: document.getElementById('playerList')
+};
 
 let myUsername = null; // Variable to store the player's username
 
-// Handle "Ready" button click
-readyButton.addEventListener('click', () => {
-    socket.emit('playerReady'); // Notify server that player is ready
-    readyButton.disabled = true; // Disable the button after clicking
-});
 
-// Handle "Join Game" button click
-joinGameButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    if (!username || username.length < 3 || username.length > 20) {
-        alert('Invalid username. Must be 3-20 characters long.');
-        return;
-    }
-
-    if (username) {
-        myUsername = username; // Store the username
-        socket.emit('setUsername', username); // Send username to server
-        joinGameButton.style.display = 'none'; // Hide the "Join Game" button
-        readyButton.style.display = 'inline'; // Show the "Ready" button
-    } else {
-        alert('Please enter a username.'); // Alert if username is empty
-    }
-});
+function initializeEventListeners() {
+    elements.readyButton.addEventListener('click', handleReadyClick);
+    elements.joinGameButton.addEventListener('click', handleJoinGameClick);
+    elements.wordGuess.addEventListener('input', handleWordGuessInput);
+    elements.submitGuess.addEventListener('click', handleSubmitGuessClick);
+}
 
 
-// When the player types in their guess
-wordGuess.addEventListener('input', () => {
-    const text = wordGuess.value.trim();
-    // Emit the typing event with username and text
-    socket.emit('typing', { username: myUsername, text });
-});
-
-// Handle incoming typing events
-socket.on('playerTyping', ({ username, text }) => {
-    let typingDisplayElement = document.getElementById(`typingDisplay_${username}`);
-    if (!typingDisplayElement) {
-        typingDisplayElement = document.createElement('div');
-        typingDisplayElement.id = `typingDisplay_${username}`;
-        document.getElementById('playerTypingStatus').appendChild(typingDisplayElement);
-    }
-    typingDisplayElement.textContent = `${username} is typing: ${text}`;
-});
+function initializeSocketEventHandlers() {
+    socket.on('playerTyping', handlePlayerTyping);
+    socket.on('usernameError', handleUsernameError);
+    socket.on('gameUpdate', handleGameUpdate);
+    socket.on('playerStatusUpdate', updatePlayerList);
+    socket.on('gameOver', handleGameOver);
+    socket.on('gameWin', handleGameWin);
+    socket.on('invalidWord', (message) => alert(message));
+    socket.on('readinessUpdate', updateReadinessDisplay);
+}
 
 
-// Handle username error event from server
-socket.on('usernameError', (message) => {
-    alert(message); // Show error message to the user
-    joinGameButton.style.display = 'inline'; // Show the "Join Game" button again
-    readyButton.style.display = 'none'; // Hide the "Ready" button
-    usernameInput.value = ''; // Optionally clear the username input
-});
 
-// Handle "Submit Guess" button click
-submitGuess.addEventListener('click', () => {
-    socket.emit('guess', wordGuess.value.trim()); // Send guess to server
-    wordGuess.value = ''; // Clear input field
-});
-
-// Handle game updates from server
-socket.on('gameUpdate', data => {
-    if (data.gameStarted) {
-        gameScreen.style.display = 'block'; // Display the game screen
-        usernameScreen.style.display = 'none'; // Optionally, hide the username screen
-    }
-    letterDisplay.textContent = data.letters; // Display current letters for guessing
-    updateScoreBoard(data.scores, data.lives); // Now also passing the lives data
-});
-
-
-// Listen for player status update from server
-socket.on('playerStatusUpdate', (playerStatus) => {
-    updatePlayerList(playerStatus); // Update player list UI
-});
-
-
-socket.on('gameOver', () => {
-    alert('You have lost all your lives!');
-    wordGuess.disabled = true;
-    submitGuess.disabled = true;
-    // Additional handling for game over state
-});
-
-socket.on('gameWin', (winnerUsername) => {
-    if (myUsername === winnerUsername) {
-        alert('You won!');
-    } else {
-        alert(`${winnerUsername} has won the game!`);
-    }
-    wordGuess.disabled = true;
-    submitGuess.disabled = true;
-});
-
-
-socket.on('invalidWord', (message) => {
-    alert(message); // Display the error message
-});
-
-
-socket.on('readinessUpdate', ({ totalPlayers, readyPlayers }) => {
-    const readinessFraction = `${readyPlayers}/${totalPlayers}`;
-    document.getElementById('readinessFraction').textContent = readinessFraction;
-});
-
-
-// Update UI with player status
 function updatePlayerList(playerStatus) {
-    const playerListElement = document.getElementById('playerList');
+    const playerListElement = elements.playerList;
     playerListElement.innerHTML = ''; // Clear existing list
     playerStatus.forEach(player => {
         const playerElement = document.createElement('div');
@@ -185,4 +105,83 @@ function updateScoreBoard(scores, lives) {
 }
 
 
+function updateReadinessDisplay({ totalPlayers, readyPlayers }) {
+    elements.readinessFraction.textContent = `${readyPlayers}/${totalPlayers}`;
+}
 
+// Event Handling Functions
+function handleReadyClick() {
+    socket.emit('playerReady'); // Notify server that player is ready
+    readyButton.disabled = true; // Disable the button after clicking
+}
+
+function handleJoinGameClick() {
+    const username = elements.usernameInput.value.trim();
+    if (!username || username.length < 3 || username.length > 20) {
+        alert('Invalid username. Must be 3-20 characters long.');
+        return;
+    }
+
+    myUsername = username;
+    socket.emit('setUsername', username);
+    elements.joinGameButton.style.display = 'none';
+    elements.readyButton.style.display = 'inline';
+}
+
+function handleWordGuessInput() {
+    const text = elements.wordGuess.value.trim();
+    socket.emit('typing', { username: myUsername, text }); // Emit the typing event
+}
+
+function handleSubmitGuessClick() {
+    socket.emit('guess', elements.wordGuess.value.trim()); // Send guess to server
+    elements.wordGuess.value = ''; // Clear input field
+}
+
+function handlePlayerTyping({ username, text }) {
+    let typingDisplayElement = document.getElementById(`typingDisplay_${username}`);
+    if (!typingDisplayElement) {
+        typingDisplayElement = document.createElement('div');
+        typingDisplayElement.id = `typingDisplay_${username}`;
+        document.getElementById('playerTypingStatus').appendChild(typingDisplayElement);
+    }
+    typingDisplayElement.textContent = `${username} is typing: ${text}`;
+}
+
+function handleUsernameError(message) {
+    alert(message); // Show error message to the user
+    elements.joinGameButton.style.display = 'inline'; // Show the "Join Game" button again
+    elements.readyButton.style.display = 'none'; // Hide the "Ready" button
+    elements.usernameInput.value = ''; // Optionally clear the username input
+}
+
+function handleGameUpdate(data) {
+    if (data.gameStarted) {
+        elements.gameScreen.style.display = 'block'; // Display the game screen
+        elements.usernameScreen.style.display = 'none'; // Optionally, hide the username screen
+    }
+    elements.letterDisplay.textContent = data.letters; // Display current letters for guessing
+    updateScoreBoard(data.scores, data.lives); // Update scoreboard with scores and lives
+}
+
+function handleGameOver() {
+    alert('You have lost all your lives!');
+    elements.wordGuess.disabled = true;
+    elements.submitGuess.disabled = true;
+    // Additional handling for game over state
+}
+
+function handleGameWin(winnerUsername) {
+    if (myUsername === winnerUsername) {
+        alert('You won!');
+    } else {
+        alert(`${winnerUsername} has won the game!`);
+    }
+    elements.wordGuess.disabled = true;
+    elements.submitGuess.disabled = true;
+}
+
+
+
+initializeEventListeners();
+initializeSocketEventHandlers();
