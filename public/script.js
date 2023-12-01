@@ -13,7 +13,7 @@ const elements = {
     scoreBoard: document.getElementById('scoreBoard'),
     readyButton: document.getElementById('readyButton'),
     playerTypingStatus: document.getElementById('playerTypingStatus'),
-    readinessFraction: document.getElementById('readinessFraction'),
+    //readinessFraction: document.getElementById('readinessFraction'),
     playerList: document.getElementById('playerList')
 };
 
@@ -36,7 +36,7 @@ function initializeSocketEventHandlers() {
     socket.on('gameOver', handleGameOver);
     socket.on('gameWin', handleGameWin);
     socket.on('invalidWord', (message) => alert(message));
-    socket.on('readinessUpdate', updateReadinessDisplay);
+    //socket.on('readinessUpdate', updateReadinessDisplay);
 }
 
 
@@ -104,10 +104,11 @@ function updateScoreBoard(scores, lives) {
     }
 }
 
-
+/*
 function updateReadinessDisplay({ totalPlayers, readyPlayers }) {
     elements.readinessFraction.textContent = `${readyPlayers}/${totalPlayers}`;
 }
+*/
 
 // Event Handling Functions
 function handleReadyClick() {
@@ -172,14 +173,26 @@ function handleGameOver() {
 }
 
 function handleGameWin(winnerUsername) {
-    if (myUsername === winnerUsername) {
-        alert('You won!');
-    } else {
-        alert(`${winnerUsername} has won the game!`);
+    // Set the winner's name in the modal
+    document.getElementById('winnerName').textContent = winnerUsername;
+
+    // Display the modal
+    var modal = document.getElementById('winnerModal');
+    modal.style.display = "block";
+
+    // When the user clicks on <span> (x), close the modal
+    document.getElementsByClassName("close")[0].onclick = function() {
+        modal.style.display = "none";
     }
-    elements.wordGuess.disabled = true;
-    elements.submitGuess.disabled = true;
+
+    // When the user clicks anywhere outside of the modal, close it
+    window.onclick = function(event) {
+        if (event.target === modal) {
+            modal.style.display = "none";
+        }
+    }
 }
+
 
 
 

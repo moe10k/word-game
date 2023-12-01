@@ -8,9 +8,16 @@ const axios = require('axios');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);  // Socket.IO with the HTTP server
+const path = require('path');
 
 // Serve static files from 'public' directory
 app.use(express.static('public'));
+
+/*
+app.get('/winner', (req, res) => {
+    res.sendFile(path.join(__dirname, 'path/to/your/winner.html')); // Make sure to provide the correct path
+});
+*/
 
 // Game state variables
 let currentLetters = generateRandomLetters();
@@ -25,7 +32,7 @@ io.on('connection', (socket) => {
     // Player connection logic
     console.log(`New player connected: ${socket.id}`);
     totalPlayers++;
-    updateReadinessStatus();
+    //updateReadinessStatus();
 
 
     // Username setting event
@@ -47,9 +54,11 @@ io.on('connection', (socket) => {
     socket.on('typing', typingHandler(socket));
 
     // Readiness status update function
+    /*
     function updateReadinessStatus() {
         io.emit('readinessUpdate', { totalPlayers, readyPlayers });
     }
+    */
 });
 
 // Start the server on port 3000
@@ -192,7 +201,7 @@ function playerReadyHandler(socket) {
 function playerNotReadyHandler(socket) {
     return function() {
         readyPlayers--;
-        updateReadinessStatus();
+        //updateReadinessStatus();
 }}
 
 function playerDisconnectHandler(socket) {

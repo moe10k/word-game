@@ -18,7 +18,7 @@
         <button id="joinGame">Join Game</button>
         <button id="readyButton" style="display: none;">Ready</button>
         <div id="playerList"></div>
-        <div id="playerReadinessStatus">Ready Players: <span id="readinessFraction">0/0</span></div>
+        <!--<div id="playerReadinessStatus">Ready Players: <span id="readinessFraction">0/0</span></div>-->
 
     </div>
 
@@ -26,11 +26,20 @@
         <div id="letters">Letters: <span id="letterDisplay"></span></div>
         <input type="text" id="wordGuess" placeholder="Enter your guess">
         <button id="submitGuess">Submit Guess</button>
-        <div id="player-statuses">
-            <!-- Player statuses will be dynamically inserted here -->
-          </div>
-          
+        <div id="player-statuses"><!-- Player statuses will be dynamically inserted here --></div>
     </div>
+
+
+    <!-- The Modal -->
+    <div id="winnerModal" class="modal">
+    <!-- Modal content -->
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h1 id="winnerAnnouncement">Congratulations, <span id="winnerName"></span>!</h1>
+        <p>You are the winner!</p>
+    </div>
+    </div>
+
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
