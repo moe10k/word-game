@@ -237,8 +237,6 @@ function resetGameState() {
     lives = {}; // Reset lives
     totalPlayers = 0;
     readyPlayers = 0;
-    totalPlayers = 0;
-    readyPlayers = 0;
     // ... any other necessary resets ...
     io.emit('gameReset');
 
