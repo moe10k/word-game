@@ -128,3 +128,15 @@ button:hover {
     cursor: pointer;
   }
   
+
+
+
+/* version number*/
+
+.bottom-right-text {
+    position: absolute; /* Position the text absolutely within the container */
+    bottom: 0; /* Align to the bottom */
+    right: 0; /* Align to the right */
+    
+    /* Additional styling as needed (e.g., font size, color) */
+}
