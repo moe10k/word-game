@@ -173,6 +173,8 @@ function handleGameOver() {
 }
 
 function handleGameWin(winnerUsername) {
+    elements.wordGuess.disabled = true;
+    elements.submitGuess.disabled = true;
     // Set the winner's name in the modal
     document.getElementById('winnerName').textContent = winnerUsername;
 
@@ -191,9 +193,46 @@ function handleGameWin(winnerUsername) {
             modal.style.display = "none";
         }
     }
+
+    //starts reset process when reset button clicked
+    document.getElementById('resetGame').addEventListener('click', function() {
+        socket.emit('resetGameRequest'); // Notify the server to reset the game
+        resetFrontendUI(); // Reset the frontend UI
+    });
 }
 
+function resetFrontendUI() {
+    elements.wordGuess.disabled = false;
+    elements.submitGuess.disabled = false;
 
+    // Hide the game screen and modal, show the username screen
+    document.getElementById('game').style.display = 'none';
+    document.getElementById('winnerModal').style.display = 'none';
+    document.getElementById('usernameScreen').style.display = 'block';
+
+    // Reset input fields
+    document.getElementById('usernameInput').value = '';
+    document.getElementById('wordGuess').value = '';
+
+    // Reset buttons and other interactive elements
+    document.getElementById('joinGame').style.display = 'inline';
+    document.getElementById('readyButton').style.display = 'none';
+    document.getElementById('readyButton').disabled = false;
+    document.getElementById('submitGuess').disabled = false;
+
+    // Clear dynamic content (e.g., player list, scores, typing status)
+    document.getElementById('playerList').innerHTML = '';
+    document.getElementById('scoreBoard').innerHTML = '';
+    document.getElementById('playerTypingStatus').innerHTML = '';
+    document.getElementById('livesDisplay').innerHTML = '';
+
+    // Reset any other game-specific UI elements
+    // For example, resetting the letter display or player statuses
+    document.getElementById('letterDisplay').textContent = '';
+    document.getElementById('player-statuses').innerHTML = '';
+
+    // Add any additional UI reset logic specific to your game
+}
 
 
 initializeEventListeners();

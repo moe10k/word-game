@@ -59,6 +59,10 @@ io.on('connection', (socket) => {
         io.emit('readinessUpdate', { totalPlayers, readyPlayers });
     }
     */
+    socket.on('resetGameRequest', () => {
+        resetGameState();
+        io.emit('gameReset'); // Notify all clients to reset their UI
+    });
 });
 
 // Start the server on port 3000
@@ -225,3 +229,18 @@ function typingHandler(socket) {
     return function({ username, text }) {
         socket.broadcast.emit('playerTyping', { username, text });
 }}
+
+
+function resetGameState() {
+    scores = {}; // Reset scores
+    userMap = {}; // Reset user map
+    lives = {}; // Reset lives
+    totalPlayers = 0;
+    readyPlayers = 0;
+    totalPlayers = 0;
+    readyPlayers = 0;
+    // ... any other necessary resets ...
+    io.emit('gameReset');
+
+    console.log('Game state has been reset'); // Optional logging
+}
