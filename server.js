@@ -65,6 +65,10 @@ io.on('connection', (socket) => {
         resetGameState();
         io.emit('gameReset'); // Notify all clients to reset their UI
     });
+
+    socket.on('clearTyping', () => {
+        socket.broadcast.emit('typingCleared'); // Notify all other clients to clear player typingstatus
+    });
 });
 
 // Start the server on port 3000
@@ -174,6 +178,10 @@ function setUsernameHandler(socket) {
 
 function guessHandler(socket) {
     return async function(word) {
+        if (lives[socket.username] <= 0) { // Check if the player has zero or fewer lives
+            console.log(`${socket.username} has no more lives. Guess ignored.`);
+            return;
+        }
 
         if (socket.id !== currentPlayerTurn) {
             socket.emit('notYourTurn');
@@ -195,6 +203,7 @@ function guessHandler(socket) {
                 if (lives[socket.username] <= 0) {
                     socket.emit('gameOver');
                     console.log(`${socket.username} has 0 lives`);
+                    checkForLastPlayerStanding();
                 }
             }
             if (scores[socket.username] >= 3) {
@@ -264,11 +273,24 @@ function resetGameState() {
 
 function nextPlayerTurn() {
     const playerIds = Object.keys(userMap);
-    const currentIndex = playerIds.indexOf(currentPlayerTurn);
-    const nextIndex = (currentIndex + 1) % playerIds.length;
-    currentPlayerTurn = playerIds[nextIndex];
+    let currentIndex = playerIds.indexOf(currentPlayerTurn);
+    
+    // Loop to find the next player with lives remaining
+    let attempts = 0; // To prevent an infinite loop in case all players are out
+    do {
+        currentIndex = (currentIndex + 1) % playerIds.length;
+        currentPlayerTurn = playerIds[currentIndex];
+        attempts++;
+    } while (lives[userMap[currentPlayerTurn].name] <= 0 && attempts < playerIds.length);
 
-    emitCurrentTurn(); // And also here
+    // Check if all players are out of lives
+    if (attempts >= playerIds.length) {
+        console.log("All players are out of lives. Game Over or Reset required.");
+        // Here you can implement additional logic to handle this scenario,
+        // such as automatically resetting the game or declaring a winner.
+    } else {
+        emitCurrentTurn(); // Notify clients of the current player's turn
+    }
 }
 
 function emitCurrentTurn() {
@@ -276,4 +298,16 @@ function emitCurrentTurn() {
     io.emit('turnUpdate', currentUsername);
 }
 
+
+function checkForLastPlayerStanding() {
+    const playersWithLives = Object.keys(userMap).filter(socketId => lives[userMap[socketId].name] > 0);
+
+    if (playersWithLives.length === 1) {
+        // Last player standing
+        const winningPlayerName = userMap[playersWithLives[0]].name;
+        console.log(`${winningPlayerName} is the last player standing and wins the game!`);
+        io.emit('gameWin', winningPlayerName); // Notify all clients that this player has won
+        // Optionally, you can also reset the game state here or implement other end-game logic
+    }
+}
 
