@@ -140,3 +140,13 @@ button:hover {
     
     /* Additional styling as needed (e.g., font size, color) */
 }
+
+
+
+/*  turns  */
+#currentTurnDisplay {
+    font-size: 1.2em;
+    color: #333;
+    margin-bottom: 10px;
+    /* Add any other styles you like for positioning, color, etc. */
+}
