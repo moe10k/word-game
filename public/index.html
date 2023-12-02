@@ -6,6 +6,20 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="area" >
+            <ul class="circles">
+                    <li></li>
+                    <li></li>
+                    <li></li>
+                    <li></li>
+                    <li></li>
+                    <li></li>
+                    <li></li>
+                    <li></li>
+                    <li></li>
+                    <li></li>
+            </ul>
+    </div >
 
     <div id="leftSidebar">
         <div id="scoreBoard"></div>
@@ -38,11 +52,15 @@
     <div id="winnerModal" class="modal">
     <!-- Modal content -->
     <div class="modal-content">
-        <span class="close">&times;</span>
-        <h1 id="winnerAnnouncement">Congratulations, <span id="winnerName"></span>!</h1>
-        <p>You are the winner!</p>
-        <!-- Inside the winnerModal div -->
-        <button id="resetGame">Reset Game</button>
+        <div class="modal-header">
+            <h1 id="winnerAnnouncement">Congratulations, <span id="winnerName"></span>!</h1>
+        </div>
+        <div class="modal-body">
+            <p>You are the winner!</p>
+        </div>
+        <div class="modal-footer">
+            <button id="resetGame">Reset Game</button>
+        </div>
     </div>
     </div>
 
