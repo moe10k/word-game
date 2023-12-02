@@ -1,9 +1,158 @@
-body {
-    font-family: Arial, sans-serif;
-    background-color: white;
+@import url('https://fonts.googleapis.com/css?family=Exo:400,700');
+
+*{
+    margin: 0px;
+    padding: 0px;
+}
+
+body{
+    font-family: 'Exo', sans-serif;
     text-align: center;
     padding: 20px;
 }
+
+
+.context {
+    width: 100%;
+    position: absolute;
+    top:50vh;
+    
+}
+
+
+.context h1{
+    text-align: center;
+    color: #fff;
+    font-size: 50px;
+}
+
+
+.area{
+    position: fixed; /* Fix the position */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1; /* Send it to the back */
+    background: #4e54c8;  
+    background: -webkit-linear-gradient(to left, #8f94fb, #4e54c8);  
+}
+
+.circles{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.circles li{
+    position: absolute;
+    display: block;
+    list-style: none;
+    width: 20px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    animation: animate 25s linear infinite;
+    bottom: -150px;
+    
+}
+
+.circles li:nth-child(1){
+    left: 25%;
+    width: 80px;
+    height: 80px;
+    animation-delay: 0s;
+}
+
+
+.circles li:nth-child(2){
+    left: 10%;
+    width: 20px;
+    height: 20px;
+    animation-delay: 2s;
+    animation-duration: 12s;
+}
+
+.circles li:nth-child(3){
+    left: 70%;
+    width: 20px;
+    height: 20px;
+    animation-delay: 4s;
+}
+
+.circles li:nth-child(4){
+    left: 40%;
+    width: 60px;
+    height: 60px;
+    animation-delay: 0s;
+    animation-duration: 18s;
+}
+
+.circles li:nth-child(5){
+    left: 65%;
+    width: 20px;
+    height: 20px;
+    animation-delay: 0s;
+}
+
+.circles li:nth-child(6){
+    left: 75%;
+    width: 110px;
+    height: 110px;
+    animation-delay: 3s;
+}
+
+.circles li:nth-child(7){
+    left: 35%;
+    width: 150px;
+    height: 150px;
+    animation-delay: 7s;
+}
+
+.circles li:nth-child(8){
+    left: 50%;
+    width: 25px;
+    height: 25px;
+    animation-delay: 15s;
+    animation-duration: 45s;
+}
+
+.circles li:nth-child(9){
+    left: 20%;
+    width: 15px;
+    height: 15px;
+    animation-delay: 2s;
+    animation-duration: 35s;
+}
+
+.circles li:nth-child(10){
+    left: 85%;
+    width: 150px;
+    height: 150px;
+    animation-delay: 0s;
+    animation-duration: 11s;
+}
+
+
+
+@keyframes animate {
+
+    0%{
+        transform: translateY(0) rotate(0deg);
+        opacity: 1;
+        border-radius: 0;
+    }
+
+    100%{
+        transform: translateY(-1000px) rotate(720deg);
+        opacity: 0;
+        border-radius: 50%;
+    }
+
+}
+/* everything above is the background design */
 
 #leftSidebar {
     display: flex;
@@ -44,15 +193,6 @@ button:hover {
     background-color: #0056b3;
 }
 
-.player-score {
-    font-size: 16px;
-    color: purple;
-    padding: 10px 20px;
-    margin: 5px;
-    text-shadow: 1px 1px 2px #000;
-    margin-bottom: 20px;
-}
-
 .hearts-container {
     display: inline-block;
     vertical-align: middle;
@@ -81,6 +221,33 @@ button:hover {
     background-repeat: no-repeat;
 }
 
+.player-score {
+    font-size: 16px;
+    color: white;
+    padding: 10px 20px;
+    margin: 5px;
+    text-shadow: 1px 1px 2px #000;
+    margin-bottom: 20px;
+}
+
+/*  turns  */
+#currentTurnDisplay {
+    font-size: 1.2em;
+    color: white;
+    text-shadow: 1px 1px 2px #000;
+    margin-bottom: 10px;
+    /* Add any other styles you like for positioning, color, etc. */
+}
+
+#letters {
+    font-size: 16px;
+    color: white;
+    padding: 10px 20px;
+    margin: 5px;
+    text-shadow: 1px 1px 2px #000;
+    margin-bottom: 20px;
+}
+
 .typing-status {
     font-style: italic;
 }
@@ -100,20 +267,62 @@ button:hover {
     width: 100%; /* Full width */
     height: 100%; /* Full height */
     overflow: auto; /* Enable scroll if needed */
-    background-color: rgb(0,0,0); /* Fallback color */
     background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
-  }
-  
-  /* Modal Content */
-  .modal-content {
+}
+
+/* Modal Content */
+.modal-content {
     background-color: #fefefe;
-    margin: 15% auto; /* 15% from the top and centered */
+    margin: 10% auto; /* 10% from the top and centered */
     padding: 20px;
-    border: 1px solid #888;
-    width: 80%; /* Could be more or less, depending on screen size */
-  }
+    border-radius: 10px;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+    width: 50%; /* Adjusted for better responsiveness */
+}
+
+/* Modal Header */
+.modal-header {
+    padding: 10px 20px;
+    background: red;
+    color: white;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+/* Modal Body */
+.modal-body {padding: 20px;}
+
+/* Modal Footer */
+.modal-footer {
+    padding: 10px 20px;
+    background: #f1f1f1;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    text-align: right;
+}
+
+/* Button Style */
+#resetGame {
+    background-color: red; /* Green */
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    transition-duration: 0.4s;
+    cursor: pointer;
+}
+
+#resetGame:hover {
+    background-color: white;
+    color: black;
+    border: 2px solid #4CAF50;
+}
   
-  /* The Close Button */
+  /* The Close Button
   .close {
     color: #aaa;
     float: right;
@@ -127,7 +336,7 @@ button:hover {
     text-decoration: none;
     cursor: pointer;
   }
-  
+  */
 
 
 
@@ -139,14 +348,4 @@ button:hover {
     right: 0; /* Align to the right */
     
     /* Additional styling as needed (e.g., font size, color) */
-}
-
-
-
-/*  turns  */
-#currentTurnDisplay {
-    font-size: 1.2em;
-    color: #333;
-    margin-bottom: 10px;
-    /* Add any other styles you like for positioning, color, etc. */
 }
