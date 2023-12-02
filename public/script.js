@@ -18,12 +18,19 @@ const elements = {
 };
 
 let myUsername = null; // Variable to store the player's username
+let isGameOver = false; // Global variable to track the game over state
 
 
 function initializeEventListeners() {
     elements.readyButton.addEventListener('click', handleReadyClick);
     elements.joinGameButton.addEventListener('click', handleJoinGameClick);
     elements.wordGuess.addEventListener('input', handleWordGuessInput);
+    elements.wordGuess.addEventListener('keypress', function(event) {// Add 'keypress' event listener to the wordGuess input field
+        if (event.key === 'Enter') {  // Check if the pressed key is Enter
+            handleSubmitGuessClick();  // Call the submit guess function
+            event.preventDefault();    // Prevent default form submission behavior
+        }
+    });
     elements.submitGuess.addEventListener('click', handleSubmitGuessClick);
 }
 
@@ -49,6 +56,10 @@ function initializeSocketEventHandlers() {
     });
     socket.on('notYourTurn', () => {
         alert("It's not your turn!");
+    });
+
+    socket.on('typingCleared', () => {
+        document.getElementById('globalTypingDisplay').textContent = '';
     });
 }
 
@@ -143,23 +154,25 @@ function handleJoinGameClick() {
 }
 
 function handleWordGuessInput() {
-    const text = elements.wordGuess.value.trim();
-    socket.emit('typing', { username: myUsername, text }); // Emit the typing event
+    if (!isGameOver) { // Check if the game is not over
+        const text = elements.wordGuess.value.trim();
+        socket.emit('typing', { username: myUsername, text });
+    }
 }
 
 function handleSubmitGuessClick() {
-    socket.emit('guess', elements.wordGuess.value.trim()); // Send guess to server
-    elements.wordGuess.value = ''; // Clear input field
+    socket.emit('guess', elements.wordGuess.value.trim());
+    socket.emit('clearTyping'); // This line should be added
+    elements.wordGuess.value = '';
 }
 
 function handlePlayerTyping({ username, text }) {
-    let typingDisplayElement = document.getElementById(`typingDisplay_${username}`);
-    if (!typingDisplayElement) {
-        typingDisplayElement = document.createElement('div');
-        typingDisplayElement.id = `typingDisplay_${username}`;
-        document.getElementById('playerTypingStatus').appendChild(typingDisplayElement);
+    const typingDisplayElement = document.getElementById('globalTypingDisplay');
+    if (text) {
+        typingDisplayElement.textContent = `${username} is typing: ${text}`;
+    } else {
+        typingDisplayElement.textContent = ''; // Clear the text if there's no typing
     }
-    typingDisplayElement.textContent = `${username} is typing: ${text}`;
 }
 
 function handleUsernameError(message) {
@@ -182,7 +195,7 @@ function handleGameOver() {
     alert('You have lost all your lives!');
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
-    // Additional handling for game over state
+    isGameOver = true; // Set the game over flag
 }
 
 function handleGameWin(winnerUsername) {
@@ -195,17 +208,20 @@ function handleGameWin(winnerUsername) {
     var modal = document.getElementById('winnerModal');
     modal.style.display = "block";
 
+    
+    /*
     // When the user clicks on <span> (x), close the modal
     document.getElementsByClassName("close")[0].onclick = function() {
         modal.style.display = "none";
     }
-
+    
     // When the user clicks anywhere outside of the modal, close it
     window.onclick = function(event) {
         if (event.target === modal) {
             modal.style.display = "none";
         }
     }
+    */
 
     //starts reset process when reset button clicked
     document.getElementById('resetGame').addEventListener('click', function() {
@@ -243,6 +259,7 @@ function resetFrontendUI() {
     // For example, resetting the letter display or player statuses
     document.getElementById('letterDisplay').textContent = '';
     document.getElementById('player-statuses').innerHTML = '';
+    document.getElementById('globalTypingDisplay').innerHTML = '';
 
     // Add any additional UI reset logic specific to your game
 }
