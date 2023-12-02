@@ -19,6 +19,7 @@ const elements = {
 
 let myUsername = null; // Variable to store the player's username
 let isGameOver = false; // Global variable to track the game over state
+let gameInProgress = false;
 
 
 function initializeEventListeners() {
@@ -60,6 +61,12 @@ function initializeSocketEventHandlers() {
 
     socket.on('typingCleared', () => {
         document.getElementById('globalTypingDisplay').textContent = '';
+    });
+    socket.on('gameInProgress', () => {
+        alert('A game is currently in progress. Please wait for the next round.');
+    });
+    socket.on('actionBlocked', (message) => {
+        alert(message);
     });
 }
 
@@ -142,6 +149,10 @@ function handleReadyClick() {
 
 function handleJoinGameClick() {
     const username = elements.usernameInput.value.trim();
+    if (gameInProgress) {
+        alert('A game is currently in progress. Please wait for the next round.');
+        return;
+    }
     if (!username || username.length < 3 || username.length > 20) {
         alert('Invalid username. Must be 3-20 characters long.');
         return;
@@ -183,6 +194,7 @@ function handleUsernameError(message) {
 }
 
 function handleGameUpdate(data) {
+    gameInProgress = data.gameStarted;
     if (data.gameStarted) {
         elements.gameScreen.style.display = 'block'; // Display the game screen
         elements.usernameScreen.style.display = 'none'; // Optionally, hide the username screen
@@ -231,6 +243,7 @@ function handleGameWin(winnerUsername) {
 }
 
 function resetFrontendUI() {
+    gameInProgress = false;
     elements.wordGuess.disabled = false;
     elements.submitGuess.disabled = false;
 

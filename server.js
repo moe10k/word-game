@@ -27,6 +27,7 @@ let lives = {};      // Player lives
 let totalPlayers = 0;
 let readyPlayers = 0;
 let currentPlayerTurn = null;
+let gameInProgress = false;
 
 
 // New socket connection handler
@@ -95,6 +96,7 @@ function checkAllPlayersReady() {
     // Check if all connected players are ready
     const allReady = Object.values(userMap).every(user => user.ready);
     if (allReady && Object.keys(userMap).length > 1) { // Ensure there's more than one player
+        gameInProgress = true; // Correctly set the global variable
         console.log(`Game has Started...`);
         currentLetters = generateRandomLetters();
         io.emit('gameUpdate', {
@@ -104,12 +106,11 @@ function checkAllPlayersReady() {
             gameStarted: true
         });
 
-        //randomly selects the first player for whose turn it is
+        // Randomly selects the first player for whose turn it is
         const playerIds = Object.keys(userMap);
         currentPlayerTurn = playerIds[Math.floor(Math.random() * playerIds.length)];
 
         emitCurrentTurn();
-
 
         // Reset ready status after starting the game
         Object.values(userMap).forEach(user => user.ready = false);
@@ -160,6 +161,10 @@ function updateAllPlayers() {
 
 function setUsernameHandler(socket) {
     return function(username) {
+        if (gameInProgress) {
+            socket.emit('gameInProgress');
+            return;
+        }
         if (!username || typeof username !== 'string' || username.length < 3 || username.length > 20) {
             socket.emit('usernameError', 'Invalid username. Must be 3-20 characters long.');
             return;
@@ -178,15 +183,15 @@ function setUsernameHandler(socket) {
 
 function guessHandler(socket) {
     return async function(word) {
+        if (gameInProgress && socket.id !== currentPlayerTurn) {
+            socket.emit('actionBlocked', 'Wait for your turn.');
+            return;
+        }
         if (lives[socket.username] <= 0) { // Check if the player has zero or fewer lives
             console.log(`${socket.username} has no more lives. Guess ignored.`);
             return;
         }
 
-        if (socket.id !== currentPlayerTurn) {
-            socket.emit('notYourTurn');
-            return;
-        }
 
         if (!word || typeof word !== 'string' || word.length < 1) {
             socket.emit('invalidWord', 'Invalid guess.');
@@ -218,6 +223,10 @@ function guessHandler(socket) {
 
 function playerReadyHandler(socket) {
     return function() {
+        if (gameInProgress) {
+            socket.emit('actionBlocked', 'Game in progress. Wait for the next round.');
+            return;
+        }
         console.log(`${socket.username} is Ready!`);
         readyPlayers++;
         //updateReadinessStatus();
@@ -259,6 +268,7 @@ function typingHandler(socket) {
 
 
 function resetGameState() {
+    gameInProgress = false;
     scores = {}; // Reset scores
     userMap = {}; // Reset user map
     lives = {}; // Reset lives
