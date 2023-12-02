@@ -26,6 +26,8 @@ let userMap = {};    // Maps socket IDs to user info
 let lives = {};      // Player lives
 let totalPlayers = 0;
 let readyPlayers = 0;
+let currentPlayerTurn = null;
+
 
 // New socket connection handler
 io.on('connection', (socket) => {
@@ -69,6 +71,8 @@ io.on('connection', (socket) => {
 const PORT = 3000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
+//io.emit('turnUpdate', currentPlayerTurn);
+
 
 async function checkWordValidity(word) {
     try {
@@ -95,6 +99,13 @@ function checkAllPlayersReady() {
             lives: lives, // Include lives in the initial update
             gameStarted: true
         });
+
+        //randomly selects the first player for whose turn it is
+        const playerIds = Object.keys(userMap);
+        currentPlayerTurn = playerIds[Math.floor(Math.random() * playerIds.length)];
+
+        emitCurrentTurn();
+
 
         // Reset ready status after starting the game
         Object.values(userMap).forEach(user => user.ready = false);
@@ -163,6 +174,12 @@ function setUsernameHandler(socket) {
 
 function guessHandler(socket) {
     return async function(word) {
+
+        if (socket.id !== currentPlayerTurn) {
+            socket.emit('notYourTurn');
+            return;
+        }
+
         if (!word || typeof word !== 'string' || word.length < 1) {
             socket.emit('invalidWord', 'Invalid guess.');
             return;
@@ -186,6 +203,7 @@ function guessHandler(socket) {
             }
             updateAllPlayers();
         }
+        nextPlayerTurn();
     };
 }
 
@@ -242,3 +260,20 @@ function resetGameState() {
 
     console.log('Game state has been reset'); // Optional logging
 }
+
+
+function nextPlayerTurn() {
+    const playerIds = Object.keys(userMap);
+    const currentIndex = playerIds.indexOf(currentPlayerTurn);
+    const nextIndex = (currentIndex + 1) % playerIds.length;
+    currentPlayerTurn = playerIds[nextIndex];
+
+    emitCurrentTurn(); // And also here
+}
+
+function emitCurrentTurn() {
+    const currentUsername = userMap[currentPlayerTurn]?.name || 'Unknown';
+    io.emit('turnUpdate', currentUsername);
+}
+
+

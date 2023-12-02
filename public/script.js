@@ -37,6 +37,19 @@ function initializeSocketEventHandlers() {
     socket.on('gameWin', handleGameWin);
     socket.on('invalidWord', (message) => alert(message));
     //socket.on('readinessUpdate', updateReadinessDisplay);
+    socket.on('turnUpdate', (currentTurnUsername) => {
+        const isMyTurn = myUsername === currentTurnUsername;
+    
+        // Enable or disable input and submit button based on the current turn
+        elements.wordGuess.disabled = !isMyTurn;
+        elements.submitGuess.disabled = !isMyTurn;
+    
+        // Update the turn display
+        document.getElementById('currentTurn').textContent = currentTurnUsername;
+    });
+    socket.on('notYourTurn', () => {
+        alert("It's not your turn!");
+    });
 }
 
 
