@@ -190,6 +190,7 @@ function showMessage(message) {
 }
 
 function resetFrontendUI() {
+    isGameOver = false;
     gameInProgress = false;
     elements.wordGuess.disabled = false;
     elements.submitGuess.disabled = false;
