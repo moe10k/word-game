@@ -21,13 +21,42 @@ let gameInProgress = false;
 io.on('connection', socket => {
     try {
         console.log(`New player connected: ${socket.id}`);
+        console.log(`Total connected sockets: ${io.engine.clientsCount}`);
+        logAllPlayers();
         totalPlayers++;
         socket.on('setUsername', setUsernameHandler(socket));
         socket.on('guess', guessHandler(socket));
         socket.on('playerReady', playerReadyHandler(socket));
         socket.on('typing', typingHandler(socket));
-        socket.on('resetGameRequest', resetGameState);
+        socket.on('resetGameRequest', () => {
+            resetPlayerState(socket.id);
+        });
         socket.on('clearTyping', () => socket.broadcast.emit('typingCleared'));
+        socket.on('disconnect', () => {
+            if (socket.username) {
+                console.log(`Player disconnected: ${socket.username}`);
+                console.log(`Total connected sockets: ${io.engine.clientsCount}`);
+                // Remove player's data
+                delete scores[socket.username];
+                delete lives[socket.username];
+                delete userMap[socket.id];
+                
+                // Update total players count
+                totalPlayers--;
+    
+                // Emit updated game state to all players
+                updateAllPlayers();
+                updatePlayerStatus();
+                logAllPlayers();
+    
+                // Additional game logic to handle disconnect during game
+                if (gameInProgress) {
+                    checkForLastPlayerStanding();
+                    nextPlayerTurn();
+                    logAllPlayers();
+                }
+            }
+        });
     } catch (error) {
         console.error('Error during socket connection:', error);
     }
@@ -56,6 +85,7 @@ function setUsernameHandler(socket) {
             userMap[socket.id] = { name: username, ready: false };
             updatePlayerStatus();
             console.log(`Username set for ${socket.id}: ${username}`);
+            logAllPlayers();
         } catch (error) {
             console.error('Error in setUsernameHandler:', error);
             socket.emit('error', 'An error occurred setting the username.');
@@ -242,13 +272,39 @@ function typingHandler(socket) {
     };
 }
 
-function resetGameState() {
-    gameInProgress = false;
-    currentPlayerTurn = null;
-    scores = {};
-    userMap = {};
-    lives = {};
-    totalPlayers = 0;
-    readyPlayers = 0;
-    console.log('Game state has been reset');
+function logAllPlayers() {
+    console.log('Current Players:');
+    Object.keys(userMap).forEach(socketId => {
+        const username = userMap[socketId].name || 'not set';
+        console.log(`${socketId}: ${username}`);
+    });
+}
+
+// Modify resetGameState to accept a player identifier
+function resetPlayerState(playerId) {
+    if (userMap[playerId]) {
+        const username = userMap[playerId].name;
+        console.log(`Resetting game state for player: ${username}`);
+
+        // Reset individual player's data
+        scores = {}; 
+        lives = {};
+        delete scores[username];
+        delete lives[username];
+        delete userMap[playerId];
+        totalPlayers = 0;
+        readyPlayers = 0;
+        gameInProgress = false;
+
+        // Update total players count
+        totalPlayers--;
+
+        // Emit updated game state to all players
+        updateAllPlayers();
+        updatePlayerStatus();
+        logAllPlayers();
+        //resetGameState();
+    } else {
+        console.log(`Player ID ${playerId} not found.`);
+    }
 }
