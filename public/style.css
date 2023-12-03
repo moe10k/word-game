@@ -252,6 +252,18 @@ button:hover {
     font-style: italic;
 }
 
+#messageBox {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: white;
+    padding: 10px;
+    border: 1px solid black;
+    z-index: 1000;
+}
+
+
 
 
 /*           winner */

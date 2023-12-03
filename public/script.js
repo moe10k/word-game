@@ -13,7 +13,6 @@ const elements = {
     scoreBoard: document.getElementById('scoreBoard'),
     readyButton: document.getElementById('readyButton'),
     playerTypingStatus: document.getElementById('playerTypingStatus'),
-    //readinessFraction: document.getElementById('readinessFraction'),
     playerList: document.getElementById('playerList')
 };
 
@@ -43,8 +42,7 @@ function initializeSocketEventHandlers() {
     socket.on('playerStatusUpdate', updatePlayerList);
     socket.on('gameOver', handleGameOver);
     socket.on('gameWin', handleGameWin);
-    socket.on('invalidWord', (message) => alert(message));
-    //socket.on('readinessUpdate', updateReadinessDisplay);
+    socket.on('invalidWord', (message) => showMessage(message));
     socket.on('turnUpdate', (currentTurnUsername) => {
         const isMyTurn = myUsername === currentTurnUsername;
     
@@ -56,17 +54,17 @@ function initializeSocketEventHandlers() {
         document.getElementById('currentTurn').textContent = currentTurnUsername;
     });
     socket.on('notYourTurn', () => {
-        alert("It's not your turn!");
+        showMessage("It's not your turn!");
     });
 
     socket.on('typingCleared', () => {
         document.getElementById('globalTypingDisplay').textContent = '';
     });
     socket.on('gameInProgress', () => {
-        alert('A game is currently in progress. Please wait for the next round.');
+        showMessage('A game is currently in progress. Please wait for the next round.');
     });
     socket.on('actionBlocked', (message) => {
-        alert(message);
+        showMessage(message);
     });
 }
 
@@ -135,12 +133,6 @@ function updateScoreBoard(scores, lives) {
     }
 }
 
-/*
-function updateReadinessDisplay({ totalPlayers, readyPlayers }) {
-    elements.readinessFraction.textContent = `${readyPlayers}/${totalPlayers}`;
-}
-*/
-
 // Event Handling Functions
 function handleReadyClick() {
     socket.emit('playerReady'); // Notify server that player is ready
@@ -150,11 +142,11 @@ function handleReadyClick() {
 function handleJoinGameClick() {
     const username = elements.usernameInput.value.trim();
     if (gameInProgress) {
-        alert('A game is currently in progress. Please wait for the next round.');
+        showMessage('A game is currently in progress. Please wait for the next round.');
         return;
     }
     if (!username || username.length < 3 || username.length > 20) {
-        alert('Invalid username. Must be 3-20 characters long.');
+        showMessage('Invalid username. Must be 3-20 characters long.');
         return;
     }
 
@@ -187,7 +179,7 @@ function handlePlayerTyping({ username, text }) {
 }
 
 function handleUsernameError(message) {
-    alert(message); // Show error message to the user
+    showMessage(message); // Show error message to the user
     elements.joinGameButton.style.display = 'inline'; // Show the "Join Game" button again
     elements.readyButton.style.display = 'none'; // Hide the "Ready" button
     elements.usernameInput.value = ''; // Optionally clear the username input
@@ -204,7 +196,7 @@ function handleGameUpdate(data) {
 }
 
 function handleGameOver() {
-    alert('You have lost all your lives!');
+    showMessage('You have lost all your lives!');
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
     isGameOver = true; // Set the game over flag
@@ -220,26 +212,20 @@ function handleGameWin(winnerUsername) {
     var modal = document.getElementById('winnerModal');
     modal.style.display = "block";
 
-    
-    /*
-    // When the user clicks on <span> (x), close the modal
-    document.getElementsByClassName("close")[0].onclick = function() {
-        modal.style.display = "none";
-    }
-    
-    // When the user clicks anywhere outside of the modal, close it
-    window.onclick = function(event) {
-        if (event.target === modal) {
-            modal.style.display = "none";
-        }
-    }
-    */
 
     //starts reset process when reset button clicked
     document.getElementById('resetGame').addEventListener('click', function() {
         socket.emit('resetGameRequest'); // Notify the server to reset the game
         resetFrontendUI(); // Reset the frontend UI
     });
+}
+
+function showMessage(message) {
+    const messageBox = document.getElementById('messageBox');
+    messageBox.innerText = message;
+    messageBox.style.display = 'block'; // Show the message box
+    // Optionally, hide the message box after a few seconds
+    setTimeout(() => messageBox.style.display = 'none', 3000);
 }
 
 function resetFrontendUI() {
