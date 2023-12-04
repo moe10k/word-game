@@ -46,6 +46,12 @@ function updatePlayerList(playerStatus) {
     playerStatus.forEach(player => {
         const playerElement = document.createElement('div');
         playerElement.textContent = `${player.name} - ${player.ready ? 'Ready' : 'Not Ready'}`;
+        // Apply the appropriate class based on readiness
+        if (player.ready) {
+            playerElement.classList.add('player-ready');
+        } else {
+            playerElement.classList.add('player-not-ready');
+        }
         playerListElement.appendChild(playerElement);
     });
 }
@@ -102,6 +108,10 @@ function handleJoinGameClick() {
     }
     myUsername = username;
     socket.emit('setUsername', username);
+
+    // Move the disabling of the input field to after the validation checks
+    elements.usernameInput.disabled = true;
+
     elements.joinGameButton.style.display = 'none';
     elements.readyButton.style.display = 'inline';
 }
@@ -130,6 +140,7 @@ function handlePlayerTyping({ username, text }) {
 
 function handleUsernameError(message) {
     showMessage(message);
+    elements.usernameInput.disabled = false; // Re-enable the username input for correction
     elements.joinGameButton.style.display = 'inline';
     elements.readyButton.style.display = 'none';
     elements.usernameInput.value = '';
@@ -194,6 +205,7 @@ function resetFrontendUI() {
     gameInProgress = false;
     elements.wordGuess.disabled = false;
     elements.submitGuess.disabled = false;
+    elements.usernameInput.disabled = false;
     document.getElementById('game').style.display = 'none';
     document.getElementById('winnerModal').style.display = 'none';
     document.getElementById('usernameScreen').style.display = 'block';
