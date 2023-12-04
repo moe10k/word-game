@@ -54,7 +54,7 @@ body{
     width: 20px;
     height: 20px;
     background: rgba(255, 255, 255, 0.2);
-    animation: animate 25s linear infinite;
+    animation: animate 10s linear infinite;
     bottom: -150px;
     
 }
@@ -169,7 +169,7 @@ body{
 
 
 #usernameScreen, #game {
-    margin-top: 20px;
+    margin-top: 80px;
 }
 
 input[type="text"] {
@@ -221,6 +221,24 @@ button:hover {
     background-repeat: no-repeat;
 }
 
+#globalTypingDisplay {
+    color: white;
+    font-size: 20px;
+    text-shadow: 1px 1px 2px #000000b5;
+}
+
+.player-ready {
+    color: rgb(13, 142, 13);
+    font-size: 20px;
+    text-shadow: 1px 1px 2px #000000b5;
+}
+
+.player-not-ready {
+    color: rgb(197, 18, 18);
+    font-size: 20px;
+    text-shadow: 1px 1px 2px #000000b5;
+}
+
 .player-score {
     font-size: 16px;
     color: white;
@@ -251,6 +269,18 @@ button:hover {
 .typing-status {
     font-style: italic;
 }
+
+#messageBox {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: white;
+    padding: 10px;
+    border: 1px solid black;
+    z-index: 1000;
+}
+
 
 
 
