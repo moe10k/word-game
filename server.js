@@ -32,31 +32,7 @@ io.on('connection', socket => {
             resetPlayerState(socket.id);
         });
         socket.on('clearTyping', () => socket.broadcast.emit('typingCleared'));
-        socket.on('disconnect', () => {
-            if (socket.username) {
-                console.log(`Player disconnected: ${socket.username}`);
-                console.log(`Total connected sockets: ${io.engine.clientsCount}`);
-                // Remove player's data
-                delete scores[socket.username];
-                delete lives[socket.username];
-                delete userMap[socket.id];
-                
-                // Update total players count
-                totalPlayers--;
-    
-                // Emit updated game state to all players
-                updateAllPlayers();
-                updatePlayerStatus();
-                logAllPlayers();
-    
-                // Additional game logic to handle disconnect during game
-                if (gameInProgress) {
-                    checkForLastPlayerStanding();
-                    nextPlayerTurn();
-                    logAllPlayers();
-                }
-            }
-        });
+        socket.on('disconnect', () => handlePlayerDisconnect(socket));
     } catch (error) {
         console.error('Error during socket connection:', error);
     }
@@ -78,6 +54,10 @@ function setUsernameHandler(socket) {
             }
             if (Object.values(userMap).some(user => user.name === username)) {
                 socket.emit('usernameError', 'Username already taken');
+                return;
+            }
+            if (gameInProgress) {
+                socket.emit('gameInProgress', 'Cannot join a game in progress. Please wait for the next game.');
                 return;
             }
             socket.username = username;
@@ -164,44 +144,74 @@ function updatePlayerStatus() {
 function guessHandler(socket) {
     return async function(word) {
         try {
-            if (gameInProgress && socket.id !== currentPlayerTurn) {
-                socket.emit('actionBlocked', 'Wait for your turn.');
+            if (!isPlayersTurn(socket) || !hasPlayerLives(socket) || !isValidGuessInput(word)) {
                 return;
             }
-            if (lives[socket.username] <= 0) {
-                console.log(`${socket.username} has no more lives. Guess ignored.`);
-                return;
+            const isValidWord = await checkWordValidity(word);
+            if (isValidWord && isValidGuess(word, currentLetters)) {
+                processValidGuess(socket, word);
+            } else {
+                handleInvalidGuess(socket);
             }
-            if (!word || typeof word !== 'string' || word.length < 1) {
-                socket.emit('invalidWord', 'Invalid guess.');
-                return;
-            }
-            if (socket.username) {
-                const isValidWord = await checkWordValidity(word);
-                if (isValidWord && isValidGuess(word, currentLetters)) {
-                    scores[socket.username] = (scores[socket.username] || 0) + 1;
-                    currentLetters = generateRandomLetters();
-                } else {
-                    socket.emit('invalidWord', 'The word is not valid');
-                    lives[socket.username] = (lives[socket.username] || 0) - 1;
-                    if (lives[socket.username] <= 0) {
-                        socket.emit('gameOver');
-                        console.log(`${socket.username} has 0 lives`);
-                        checkForLastPlayerStanding();
-                    }
-                }
-                if (scores[socket.username] >= 3) {
-                    io.emit('gameWin', socket.username);
-                    console.log(`${socket.username} Won!`);
-                }
-                updateAllPlayers();
-            }
+            checkForGameWin(socket);
             nextPlayerTurn();
         } catch (error) {
-            console.error('Error in guessHandler:', error);
-            socket.emit('error', 'An error occurred processing your guess.');
+            handleError(socket, error);
         }
     };
+}
+
+function isPlayersTurn(socket) {
+    if (gameInProgress && socket.id !== currentPlayerTurn) {
+        socket.emit('actionBlocked', 'Wait for your turn.');
+        return false;
+    }
+    return true;
+}
+
+function hasPlayerLives(socket) {
+    if (lives[socket.username] <= 0) {
+        console.log(`${socket.username} has no more lives. Guess ignored.`);
+        return false;
+    }
+    return true;
+}
+
+function isValidGuessInput(word) {
+    if (!word || typeof word !== 'string' || word.length < 1) {
+        socket.emit('invalidWord', 'Invalid guess.');
+        return false;
+    }
+    return true;
+}
+
+function processValidGuess(socket, word) {
+    scores[socket.username] = (scores[socket.username] || 0) + 1;
+    currentLetters = generateRandomLetters();
+    updateAllPlayers();
+}
+
+function handleInvalidGuess(socket) {
+    socket.emit('invalidWord', 'The word is not valid');
+    lives[socket.username] = (lives[socket.username] || 0) - 1;
+    updateAllPlayers();
+    if (lives[socket.username] <= 0) {
+        socket.emit('gameOver');
+        console.log(`${socket.username} has 0 lives`);
+        checkForLastPlayerStanding();
+    }
+}
+
+function checkForGameWin(socket) {
+    if (scores[socket.username] >= 3) {
+        io.emit('gameWin', socket.username);
+        console.log(`${socket.username} Won!`);
+    }
+}
+
+function handleError(socket, error) {
+    console.error('Error in guessHandler:', error);
+    socket.emit('error', 'An error occurred processing your guess.');
 }
 
 async function checkWordValidity(word) {
@@ -221,19 +231,27 @@ function isValidGuess(word, letters) {
 function nextPlayerTurn() {
     try {
         const playerIds = Object.keys(userMap);
+        if (playerIds.length === 0) {
+            console.log("No players connected. Waiting for players.");
+            currentPlayerTurn = null;
+            return;
+        }
+
         let currentIndex = playerIds.indexOf(currentPlayerTurn);
         let attempts = 0;
         do {
             currentIndex = (currentIndex + 1) % playerIds.length;
             currentPlayerTurn = playerIds[currentIndex];
             attempts++;
-        } while (lives[userMap[currentPlayerTurn].name] <= 0 && attempts < playerIds.length);
+        } while (attempts < playerIds.length && (!userMap[currentPlayerTurn] || lives[userMap[currentPlayerTurn].name] <= 0));
 
         if (attempts >= playerIds.length) {
             console.log("All players are out of lives. Game Over or Reset required.");
+            currentPlayerTurn = null;
+            gameInProgress = false;
         } else {
             emitCurrentTurn();
-    }
+        }
     } catch (error) {
         console.error('Error in nextPlayerTurn:', error);
     }
@@ -272,29 +290,15 @@ function typingHandler(socket) {
     };
 }
 
-function logAllPlayers() {
-    console.log('Current Players:');
-    Object.keys(userMap).forEach(socketId => {
-        const username = userMap[socketId].name || 'not set';
-        console.log(`${socketId}: ${username}`);
-    });
-}
+function handlePlayerDisconnect(socket) {
+    if (socket.username) {
+        console.log(`Player disconnected: ${socket.username}`);
+        console.log(`Total connected sockets: ${io.engine.clientsCount}`);
 
-// Modify resetGameState to accept a player identifier
-function resetPlayerState(playerId) {
-    if (userMap[playerId]) {
-        const username = userMap[playerId].name;
-        console.log(`Resetting game state for player: ${username}`);
-
-        // Reset individual player's data
-        scores = {}; 
-        lives = {};
-        delete scores[username];
-        delete lives[username];
-        delete userMap[playerId];
-        totalPlayers = 0;
-        readyPlayers = 0;
-        gameInProgress = false;
+        // Remove player's data
+        delete scores[socket.username];
+        delete lives[socket.username];
+        delete userMap[socket.id];
 
         // Update total players count
         totalPlayers--;
@@ -303,7 +307,51 @@ function resetPlayerState(playerId) {
         updateAllPlayers();
         updatePlayerStatus();
         logAllPlayers();
-        //resetGameState();
+
+        // Additional game logic to handle disconnect during game
+        if (gameInProgress) {
+            checkForLastPlayerStanding();
+            nextPlayerTurn();
+            logAllPlayers();
+        }
+
+        // Reset game state if all players have disconnected
+        if (io.engine.clientsCount === 0) {
+            resetPlayerState();
+            console.log(`All players have been disconnected`);
+        } else {
+            updateAllPlayers();
+            updatePlayerStatus();
+        }
+    }
+}
+
+function logAllPlayers() {
+    console.log('Current Players:');
+    Object.keys(userMap).forEach(socketId => {
+        const username = userMap[socketId].name || 'not set';
+        console.log(`${socketId}: ${username}`);
+    });
+}
+
+function resetPlayerState(playerId) {
+    if (userMap[playerId]) {
+        const username = userMap[playerId].name;
+        console.log(`Resetting game state for player: ${username}`);
+        currentLetters = generateRandomLetters();
+        scores = {}; 
+        lives = {};
+        delete scores[username];
+        delete lives[username];
+        delete userMap[playerId];
+        totalPlayers = 0;
+        readyPlayers = 0;
+        gameInProgress = false;
+        currentPlayerTurn = null;
+        totalPlayers--;
+        updateAllPlayers();
+        updatePlayerStatus();
+        logAllPlayers();
     } else {
         console.log(`Player ID ${playerId} not found.`);
     }
