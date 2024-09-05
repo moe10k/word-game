@@ -141,11 +141,21 @@ function updatePlayerStatus() {
 }
 
 function guessHandler(socket) {
-    return async function(word) {
+    return async function (word) {
         try {
-            if (!isPlayersTurn(socket) || !hasPlayerLives(socket) || !isValidGuessInput(socket, word)) {
+            if (!isPlayersTurn(socket) || !hasPlayerLives(socket)) {
                 return;
             }
+
+            // Check if the input is valid (not empty or null)
+            if (!isValidGuessInput(socket, word)) {
+                handleInvalidGuess(socket);
+                nextPlayerTurn();
+                clearPlayerTimer(socket.id);
+                return; // Return early since it's already handled
+            }
+
+            // Check if the word is valid
             const isValidWord = await checkWordValidity(word);
             if (isValidWord && isValidGuess(word, currentLetters)) {
                 processValidGuess(socket, word);
@@ -154,7 +164,8 @@ function guessHandler(socket) {
                 handleInvalidGuess(socket);
                 clearPlayerTimer(socket.id);
             }
-            //checkForGameWin(socket);
+
+            // Proceed to the next player's turn
             nextPlayerTurn();
             clearPlayerTimer(socket.id);
         } catch (error) {
@@ -184,7 +195,7 @@ function hasPlayerLives(socket) {
 }
 
 function isValidGuessInput(socket, word) {
-    if (!word || typeof word !== 'string' || word.length < 1) {
+    if (!word || typeof word !== 'string' || word.trim().length === 0) {
         socket.emit('invalidWord', 'Invalid guess.');
         return false;
     }
@@ -278,6 +289,7 @@ function nextPlayerTurn() {
             gameInProgress = false;
             io.emit('gameOver', 'All players are out of lives. Game Over!');
         } else {
+            io.emit('turnEnded', { playerId: currentPlayerTurn }); // Add this line to notify clients
             emitCurrentTurn();
             startPlayerTimer(currentPlayerTurn); // Start timer for the new player's turn
         }
@@ -389,6 +401,7 @@ function startPlayerTimer(socketId) {
 function clearPlayerTimer(socketId) {
     clearInterval(playerTimer[socketId]);
     io.emit('timerUpdate', null); // Clear the timer on the client side
+    io.emit('typingCleared'); // Emit typing cleared to ensure the display is updated
 }
 
 function logAllPlayers() {
