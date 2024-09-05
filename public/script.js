@@ -50,7 +50,7 @@ function updatePlayerList(playerStatus) {
     playerStatus.forEach(player => {
         const playerElement = document.createElement('div');
         playerElement.textContent = `${player.name} - ${player.ready ? 'Ready' : 'Not Ready'}`;
-        // Apply the appropriate class based on readiness
+     
         if (player.ready) {
             playerElement.classList.add('player-ready');
         } else {
@@ -113,7 +113,7 @@ function handleJoinGameClick() {
     myUsername = username;
     socket.emit('setUsername', username);
 
-    // Move the disabling of the input field to after the validation checks
+    
     elements.usernameInput.disabled = true;
 
     elements.joinGameButton.style.display = 'none';
@@ -144,7 +144,7 @@ function handlePlayerTyping({ username, text }) {
 
 function handleUsernameError(message) {
     showMessage(message);
-    elements.usernameInput.disabled = false; // Re-enable the username input for correction
+    elements.usernameInput.disabled = false; 
     elements.joinGameButton.style.display = 'inline';
     elements.readyButton.style.display = 'none';
     elements.usernameInput.value = '';
@@ -157,7 +157,7 @@ function handleGameUpdate(data) {
         elements.usernameScreen.style.display = 'none';
     }
     elements.letterDisplay.textContent = data.letters;
-    updateScoreBoard(data.scores, data.lives); // This updates the UI
+    updateScoreBoard(data.scores, data.lives); 
 }
 
 function handleGameOver() {
@@ -202,14 +202,14 @@ function updateTimerDisplay(time) {
     if (time !== null) {
         timerElement.textContent = `Time left: ${time}s`;
     } else {
-        timerElement.textContent = ''; // Clear the timer display
+        timerElement.textContent = '';
     }
 }
 
 function clearInputAndTypingStatus() {
-    elements.wordGuess.value = ''; // Clear the input box
-    clearGlobalTypingDisplay(); // Clear typing display
-    socket.emit('clearTyping'); // Ensure typing status is cleared server-side
+    elements.wordGuess.value = ''; 
+    clearGlobalTypingDisplay(); 
+    socket.emit('clearTyping'); 
 }
 
 function showMessage(message) {
@@ -222,11 +222,11 @@ function showMessage(message) {
 function resetFrontendUI() {
     isGameOver = false;
     gameInProgress = false;
-    myUsername = null; // Reset client-side username
+    myUsername = null; 
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
     elements.usernameInput.disabled = false;
-    elements.usernameInput.value = ''; // Clear the username input field
+    elements.usernameInput.value = ''; 
     elements.joinGameButton.style.display = 'inline';
     elements.readyButton.style.display = 'none';
     elements.readyButton.disabled = false;
@@ -243,7 +243,6 @@ function resetFrontendUI() {
     document.getElementById('globalTypingDisplay').innerHTML = '';
     document.getElementById('timerDisplay').textContent = '';
 
-    // Clear any leftover messages
     showMessage('Game has been reset. Please join again.');
 }
 
