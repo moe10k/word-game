@@ -41,6 +41,7 @@ function initializeSocketEventHandlers() {
     socket.on('typingCleared', clearGlobalTypingDisplay);
     socket.on('timerUpdate', updateTimerDisplay);
     socket.on('gameReset', resetFrontendUI);
+    socket.on('turnEnded', clearInputAndTypingStatus);
 }
 
 function updatePlayerList(playerStatus) {
@@ -203,6 +204,12 @@ function updateTimerDisplay(time) {
     } else {
         timerElement.textContent = ''; // Clear the timer display
     }
+}
+
+function clearInputAndTypingStatus() {
+    elements.wordGuess.value = ''; // Clear the input box
+    clearGlobalTypingDisplay(); // Clear typing display
+    socket.emit('clearTyping'); // Ensure typing status is cleared server-side
 }
 
 function showMessage(message) {
