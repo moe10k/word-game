@@ -1,3 +1,4 @@
+/*styles.css*/
 @import url('https://fonts.googleapis.com/css?family=Exo:400,700');
 
 *{
@@ -166,6 +167,13 @@ body{
     margin-right: 20px; /* Spacing between sidebar and main content */
 }
 
+#scoreBoard {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%; /* Adjust width as needed */
+}
+
 #scoreBoard, #livesDisplay{
 
     width: 200px; /* Adjust the width as needed */
@@ -245,12 +253,23 @@ button:hover {
 }
 
 .player-score {
+    display: flex;
+    justify-content: space-between; /* Align player name and score on opposite ends */
+    align-items: center;
+    width: 100%; /* Make sure the player-score takes the full width */
     font-size: 16px;
     color: white;
-    padding: 10px 20px;
-    margin: 5px;
+    padding: 5px 0; /* Reduced padding for better spacing */
     text-shadow: 1px 1px 2px #000;
-    margin-bottom: 20px;
+    white-space: nowrap; /* Prevent text from wrapping to the next line */
+    overflow: hidden; /* Hide overflow if the text is too long */
+    text-overflow: ellipsis; /* Show ellipsis if the text is too long */
+}
+
+.player-name {
+    overflow: hidden; /* Hide overflow */
+    text-overflow: ellipsis; /* Show ellipsis for long names */
+    white-space: nowrap; /* Prevent text wrapping */
 }
 
 /*  turns  */
@@ -273,6 +292,7 @@ button:hover {
 
 .typing-status {
     font-style: italic;
+    flex: 1; /* Allow the typing status to take remaining space if needed */
 }
 
 #messageBox {

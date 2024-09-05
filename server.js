@@ -265,31 +265,34 @@ function isValidGuess(word, letters) {
 
 function nextPlayerTurn() {
     try {
-        const playerIds = Object.keys(userMap);
+        const playerIds = Object.keys(userMap).filter(id => lives[userMap[id].name] > 0); // Only consider players with lives left
         if (playerIds.length === 0) {
-            console.log("No players connected. Waiting for players.");
+            console.log("All players are out of lives. Game Over or Reset required.");
             currentPlayerTurn = null;
             gameInProgress = false;
+            io.emit('gameOver', 'All players are out of lives. Game Over!');
             return;
         }
 
         let currentIndex = playerIds.indexOf(currentPlayerTurn);
-        let attempts = 0;
         clearPlayerTimer(currentPlayerTurn); // Clear the timer of the previous player
 
+        // Find the next player with lives remaining
+        let attempts = 0;
         do {
             currentIndex = (currentIndex + 1) % playerIds.length;
             currentPlayerTurn = playerIds[currentIndex];
             attempts++;
         } while (attempts < playerIds.length && (!userMap[currentPlayerTurn] || lives[userMap[currentPlayerTurn].name] <= 0));
 
+        // If all attempts have been exhausted, this means no player with lives is left
         if (attempts >= playerIds.length) {
             console.log("All players are out of lives. Game Over or Reset required.");
             currentPlayerTurn = null;
             gameInProgress = false;
             io.emit('gameOver', 'All players are out of lives. Game Over!');
         } else {
-            io.emit('turnEnded', { playerId: currentPlayerTurn }); // Add this line to notify clients
+            io.emit('turnEnded', { playerId: currentPlayerTurn }); // Notify clients
             emitCurrentTurn();
             startPlayerTimer(currentPlayerTurn); // Start timer for the new player's turn
         }
