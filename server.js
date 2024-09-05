@@ -60,7 +60,7 @@ function handleError(socket, error) { // Handles errors by logging them to the c
 
 
 // Socket Event Handlers
-function setUsernameHandler(socket) { // Handles setting the username for a new player
+function setUsernameHandler(socket) { // Handles setting the username for a player and validates the input
     return function(username) {
         try {
             if (gameInProgress) {
@@ -83,13 +83,19 @@ function setUsernameHandler(socket) { // Handles setting the username for a new 
             logAllPlayers();
         } catch (error) {
             handleError(socket, error);
+            socket.emit('usernameError', 'An error occurred while setting the username.');
         }
     };
 }
 
-function guessHandler(socket) { // Handles a player's guess, validating it, and updating the game state
+function guessHandler(socket) { // Handles a player's guess and validates the input
     return async function (word) {
         try {
+            if (!gameInProgress) {
+                socket.emit('actionBlocked', 'The game is not in progress.');
+                return;
+            }
+
             if (!isPlayersTurn(socket) || !hasPlayerLives(socket)) {
                 return;
             }
@@ -183,7 +189,7 @@ function processValidGuess(socket, word) { // Processes a valid guess by updatin
     updateAllPlayers();
 }
 
-function resetPlayerState() { // Resets the game state for all players
+function resetPlayerState() { // Resets the game state for all players and notifies them to reset their UI
     try {
         console.log(`Resetting game state for all players.`);
         scores = {}; // Reset scores
@@ -197,7 +203,7 @@ function resetPlayerState() { // Resets the game state for all players
 
         // Clear all player timers
         Object.keys(playerTimer).forEach(timerId => {
-            clearInterval(playerTimer[timerId]);
+            clearInterval(playerTimer[timerId]); // Use clearInterval to reset player timers
         });
         playerTimer = {}; // Reset the timer object
 
@@ -286,7 +292,7 @@ function isValidGuess(word, letters) { // Checks if the guessed word contains th
 
 function nextPlayerTurn() { // Moves the game to the next player's turn
     try {
-        const playerIds = Object.keys(userMap).filter(id => lives[userMap[id].name] > 0); 
+        const playerIds = Object.keys(userMap).filter(id => lives[userMap[id].name] > 0); // Only include players with lives
         if (playerIds.length === 0) {
             console.log("All players are out of lives. Game Over or Reset required.");
             currentPlayerTurn = null;
@@ -295,31 +301,32 @@ function nextPlayerTurn() { // Moves the game to the next player's turn
             return;
         }
 
-        let currentIndex = playerIds.indexOf(currentPlayerTurn)
-        clearPlayerTimer(currentPlayerTurn); 
+        let currentIndex = playerIds.indexOf(currentPlayerTurn);
+        clearPlayerTimer(currentPlayerTurn); // Clear the timer of the current player
 
         let attempts = 0;
         do {
             currentIndex = (currentIndex + 1) % playerIds.length;
             currentPlayerTurn = playerIds[currentIndex];
             attempts++;
-        } while (attempts < playerIds.length && (!userMap[currentPlayerTurn] || lives[userMap[currentPlayerTurn].name] <= 0));
+        } while (attempts < playerIds.length && (!userMap[currentPlayerTurn] || lives[userMap[currentPlayerTurn].name] <= 0)); // Exclude players with 0 lives
 
-        
         if (attempts >= playerIds.length) {
             console.log("All players are out of lives. Game Over or Reset required.");
             currentPlayerTurn = null;
             gameInProgress = false;
             io.emit('gameOver', 'All players are out of lives. Game Over!');
         } else {
-            io.emit('turnEnded', { playerId: currentPlayerTurn }); 
             emitCurrentTurn();
-            startPlayerTimer(currentPlayerTurn); 
+            startPlayerTimer(currentPlayerTurn); // Start timer for the next player's turn
         }
     } catch (error) {
         console.error('Error in nextPlayerTurn:', error);
     }
 }
+
+
+
 
 function typingHandler(socket) { // Handles a player typing a message and broadcasts it to all other players
     return function({ username, text }) {
@@ -331,7 +338,7 @@ function typingHandler(socket) { // Handles a player typing a message and broadc
     };
 }
 
-function handlePlayerDisconnect(socket) { // Handles a player disconnecting from the game
+function handlePlayerDisconnect(socket) { // Handles a player disconnecting from the gamenpm install mocha chai socket.io-client --save-dev
     try {
         if (socket.username) {
             console.log(`Player disconnected: ${socket.username}`);
@@ -365,31 +372,36 @@ function handlePlayerDisconnect(socket) { // Handles a player disconnecting from
 }
 
 function startPlayerTimer(socketId) { // Starts the timer for a player's turn
-    clearTimeout(playerTimer[socketId]);
-    let remainingTime = 10;
+    clearInterval(playerTimer[socketId]); // Clear any existing timer
+    let remainingTime = 10; // Set the timer duration
 
     playerTimer[socketId] = setInterval(() => {
         if (remainingTime > 0) {
             remainingTime--;
-            io.emit('timerUpdate', remainingTime);
+            io.emit('timerUpdate', remainingTime); // Broadcast the remaining time to all players
         } else {
-            clearInterval(playerTimer[socketId]);
+            clearInterval(playerTimer[socketId]); // Clear the timer when time runs out
             const username = userMap[socketId]?.name;
             if (username) {
+                // Deduct a life if the player runs out of time
                 lives[username] = (lives[username] || 1) - 1;
-                updateAllPlayers();
+                updateAllPlayers(); // Update all players with the new game state
 
+                // Check if the player has run out of lives
                 if (lives[username] <= 0) {
-                    io.to(socketId).emit('gameOver');
-                    checkForLastPlayerStanding();
-                } else {
-                    nextPlayerTurn();
+                    io.to(socketId).emit('gameOver'); // Notify the player they are out of lives
+                    console.log(`${username} is out of lives!`);
+                    checkForLastPlayerStanding(); // Check if there is only one player left
                 }
+                
+                // Move to the next player's turn, even if the current player is out of lives
+                nextPlayerTurn();
             }
-            io.emit('timerUpdate', null);
+            io.emit('timerUpdate', null); // Clear the timer display on the client side
         }
-    }, 1000);
+    }, 1000); // Run the timer every second
 }
+
 
 function clearPlayerTimer(socketId) { // Clears the timer for a player's turn
     clearInterval(playerTimer[socketId]);
