@@ -27,15 +27,20 @@ body{
 }
 
 
-.area{
-    position: fixed; /* Fix the position */
+.area {
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: -1; /* Send it to the back */
-    background: #4e54c8;  
-    background: -webkit-linear-gradient(to left, #8f94fb, #4e54c8);  
+    z-index: -1;
+    background: linear-gradient(to left, #22256b, #a43690);
+    animation: backgroundTransition 10s ease-in-out infinite;
+}
+
+@keyframes backgroundTransition {
+    25%, 50% { background: linear-gradient(to left, #24286a, #a33a90); } /* Pink */
+    75%, 100% { background: linear-gradient(to left, #262a75, #963384); } /* Pink */
 }
 
 .circles{

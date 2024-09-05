@@ -1,3 +1,4 @@
+//script.js
 const socket = io();
 const elements = {
     usernameScreen: document.getElementById('usernameScreen'),
@@ -38,6 +39,8 @@ function initializeSocketEventHandlers() {
     socket.on('actionBlocked', showMessage);
     socket.on('turnUpdate', handleTurnUpdate);
     socket.on('typingCleared', clearGlobalTypingDisplay);
+    socket.on('timerUpdate', updateTimerDisplay);
+    socket.on('gameReset', resetFrontendUI);
 }
 
 function updatePlayerList(playerStatus) {
@@ -57,7 +60,7 @@ function updatePlayerList(playerStatus) {
 }
 
 function updateScoreBoard(scores, lives) {
-    scoreBoard.innerHTML = '';
+    elements.scoreBoard.innerHTML = '';
     for (const [username, score] of Object.entries(scores)) {
         const playerScoreElement = document.createElement('div');
         playerScoreElement.classList.add('player-score');
@@ -93,7 +96,7 @@ function updateScoreBoard(scores, lives) {
 
 function handleReadyClick() {
     socket.emit('playerReady');
-    readyButton.disabled = true;
+    elements.readyButton.disabled = true;
 }
 
 function handleJoinGameClick() {
@@ -153,7 +156,7 @@ function handleGameUpdate(data) {
         elements.usernameScreen.style.display = 'none';
     }
     elements.letterDisplay.textContent = data.letters;
-    updateScoreBoard(data.scores, data.lives);
+    updateScoreBoard(data.scores, data.lives); // This updates the UI
 }
 
 function handleGameOver() {
@@ -193,6 +196,15 @@ function handleWordGuessKeypress(event) {
     }
 }
 
+function updateTimerDisplay(time) {
+    const timerElement = document.getElementById('timerDisplay');
+    if (time !== null) {
+        timerElement.textContent = `Time left: ${time}s`;
+    } else {
+        timerElement.textContent = ''; // Clear the timer display
+    }
+}
+
 function showMessage(message) {
     const messageBox = document.getElementById('messageBox');
     messageBox.innerText = message;
@@ -203,18 +215,18 @@ function showMessage(message) {
 function resetFrontendUI() {
     isGameOver = false;
     gameInProgress = false;
-    elements.wordGuess.disabled = false;
-    elements.submitGuess.disabled = false;
+    myUsername = null; // Reset client-side username
+    elements.wordGuess.disabled = true;
+    elements.submitGuess.disabled = true;
     elements.usernameInput.disabled = false;
+    elements.usernameInput.value = ''; // Clear the username input field
+    elements.joinGameButton.style.display = 'inline';
+    elements.readyButton.style.display = 'none';
+    elements.readyButton.disabled = false;
     document.getElementById('game').style.display = 'none';
     document.getElementById('winnerModal').style.display = 'none';
     document.getElementById('usernameScreen').style.display = 'block';
-    document.getElementById('usernameInput').value = '';
     document.getElementById('wordGuess').value = '';
-    document.getElementById('joinGame').style.display = 'inline';
-    document.getElementById('readyButton').style.display = 'none';
-    document.getElementById('readyButton').disabled = false;
-    document.getElementById('submitGuess').disabled = false;
     document.getElementById('playerList').innerHTML = '';
     document.getElementById('scoreBoard').innerHTML = '';
     document.getElementById('playerTypingStatus').innerHTML = '';
@@ -222,7 +234,12 @@ function resetFrontendUI() {
     document.getElementById('letterDisplay').textContent = '';
     document.getElementById('player-statuses').innerHTML = '';
     document.getElementById('globalTypingDisplay').innerHTML = '';
+    document.getElementById('timerDisplay').textContent = '';
+
+    // Clear any leftover messages
+    showMessage('Game has been reset. Please join again.');
 }
+
 
 initializeEventListeners();
 initializeSocketEventHandlers();
