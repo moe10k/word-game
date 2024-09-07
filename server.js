@@ -36,12 +36,13 @@ function generateRandomLetters() { // Generates two random letters for the curre
     return alphabet[randomIndex1] + alphabet[randomIndex2];
 }
 
-function logAllPlayers() { // Logs all connected players to the console
-    console.log('Current Players:');
-    Object.keys(userMap).forEach(socketId => {
+function logAllPlayers() { 
+    const playerList = Object.keys(userMap).map(socketId => {
         const username = userMap[socketId].name || 'not set';
-        console.log(`${socketId}: ${username}`);
-    });
+        return `${username}`;
+    }).join(', ');
+    
+    log(`Current Players: ${playerList}`, 'logAllPlayers');
 }
 
 function updateAllPlayers() { // Updates all connected players with the current game state (leteers, scores, lives)
@@ -52,11 +53,22 @@ function updateAllPlayers() { // Updates all connected players with the current 
     });
 }
 
-function handleError(socket, error) { // Handles errors by logging them to the console and emitting an error message to the client
-    console.error('Error:', error);
-    socket.emit('error', 'An error occurred processing your request.');
+function handleError(socket, error, context = '') { // Logs an error to the console and emits an error message to the client
+    const errorMessage = context 
+        ? `Error in ${context}: ${error.message || error}` 
+        : `Error: ${error.message || error}`;
+    
+    console.error(errorMessage);
+    if (socket) {
+        socket.emit('error', 'An error occurred. Please try again.');
+    }
 }
 
+function log(message, context = '') { // Logs a message to the console with a timestamp and optional context
+    const timestamp = new Date().toISOString();
+    const logMessage = context ? `[${context}] ${message}` : message;
+    console.log(`[${timestamp}] ${logMessage}`);
+}
 
 
 // Socket Event Handlers
@@ -79,11 +91,10 @@ function setUsernameHandler(socket) { // Handles setting the username for a play
             lives[username] = 3;
             userMap[socket.id] = { name: username, ready: false };
             updatePlayerStatus();
-            console.log(`Username set for ${socket.id}: ${username}`);
+            log(`Username set and joined for ${socket.id}: ${username}`, 'setUsernameHandler');
             logAllPlayers();
         } catch (error) {
-            handleError(socket, error);
-            socket.emit('usernameError', 'An error occurred while setting the username.');
+            handleError(socket, error, 'setUsernameHandler');
         }
     };
 }
@@ -100,26 +111,30 @@ function guessHandler(socket) { // Handles a player's guess and validates the in
                 return;
             }
 
+            log(`${socket.username} guessed: ${word}`, 'guessHandler'); // Log the player's guess
+
             if (!isValidGuessInput(socket, word)) {
                 handleInvalidGuess(socket);
-                nextPlayerTurn();
+                checkAndProceedToNextTurn();
                 clearPlayerTimer(socket.id);
                 return;
             }
 
             const isValidWord = await checkWordValidity(word);
             if (isValidWord && isValidGuess(word, currentLetters)) {
+                log(`${socket.username} guessed correctly`, 'guessHandler'); // Log correct guess
                 processValidGuess(socket, word);
                 clearPlayerTimer(socket.id);
             } else {
+                log(`${socket.username} guessed incorrectly`, 'guessHandler'); // Log incorrect guess
                 handleInvalidGuess(socket);
                 clearPlayerTimer(socket.id);
             }
 
-            nextPlayerTurn();
+            checkAndProceedToNextTurn();
             clearPlayerTimer(socket.id);
         } catch (error) {
-            handleError(socket, error);
+            handleError(socket, error, 'guessHandler');
         }
     };
 }
@@ -139,16 +154,17 @@ function playerReadyHandler(socket) { // Handles a player's ready status and sta
                 socket.emit('actionBlocked', 'Game in progress. Wait for the next round.');
                 return;
             }
-            console.log(`${socket.username} is Ready!`);
+            log(`${socket.username} is Ready!`, 'playerReadyHandler'); // Log the player's ready status
             readyPlayers++;
             if (userMap[socket.id]) {
                 userMap[socket.id].ready = true;
                 scores[socket.username] = scores[socket.username] || 0;
                 updatePlayerStatus();
                 checkAllPlayersReady();
+
             }
         } catch (error) {
-            handleError(socket, error);
+            handleError(socket, error, 'playerReadyHandler');
         }
     };
 }
@@ -157,8 +173,9 @@ function checkAllPlayersReady() { // Checks if all players are ready and starts 
     const allReady = Object.values(userMap).every(user => user.ready);
     if (allReady && Object.keys(userMap).length > 1) {
         gameInProgress = true;
-        console.log(`Game has Started...`);
+        log(`Game has Started...`, 'checkAllPlayersReady'); // Log the game start
         currentLetters = generateRandomLetters();
+        log(`Current Letters for start of game: ${currentLetters}`, 'checkAllPlayersReady'); // Log the currentletters for start of game
         io.emit('gameUpdate', {
             letters: currentLetters,
             scores: scores,
@@ -178,6 +195,7 @@ function emitCurrentTurn() { // Emits the current player's turn to all connected
     try {
         const currentUsername = userMap[currentPlayerTurn]?.name || 'Unknown';
         io.emit('turnUpdate', currentUsername);
+        log(`Current player's turn: ${currentUsername}`, 'emitCurrentTurn'); // Log the current player's turn
     } catch (error) {
         console.error('Error in emitCurrentTurn:', error);
     }
@@ -186,12 +204,13 @@ function emitCurrentTurn() { // Emits the current player's turn to all connected
 function processValidGuess(socket, word) { // Processes a valid guess by updating the game state and notifying all players
     scores[socket.username] = (scores[socket.username] || 0) + 1;
     currentLetters = generateRandomLetters();
+    log(`Current Letters: ${currentLetters}`, 'processValidGuess'); // Log the current letters
     updateAllPlayers();
 }
 
 function resetPlayerState() { // Resets the game state for all players and notifies them to reset their UI
     try {
-        console.log(`Resetting game state for all players.`);
+        log(`Resetting game state for all players.`,'resetPlayerState');
         scores = {}; // Reset scores
         lives = {}; // Reset lives
         userMap = {}; // Reset user map
@@ -216,22 +235,46 @@ function resetPlayerState() { // Resets the game state for all players and notif
     }
 }
 
-function checkForLastPlayerStanding() { // Checks if there is only one player remaining with lives and declares them the winner
+function checkAndProceedToNextTurn() { // Check for Last Player Standing or Move to Next Turn
     try {
         const playersWithLives = Object.keys(userMap).filter(socketId => lives[userMap[socketId].name] > 0);
 
         if (playersWithLives.length === 1) {
             const winningPlayerName = userMap[playersWithLives[0]].name;
-            console.log(`${winningPlayerName} is the last player standing and wins the game!`);
+            log(`${winningPlayerName} wins the game!`, 'checkAndProceedToNextTurn');
             io.emit('gameWin', winningPlayerName);
             resetPlayerState();
-        } else if (playersWithLives.length === 0) {
-            console.log("No players with lives left. Game over.");
-            io.emit('gameOver', 'No players have lives remaining. The game is over!');
-            resetPlayerState();
+        } else {
+            moveToNextPlayerTurn(playersWithLives);
         }
     } catch (error) {
-        console.error('Error in checkForLastPlayerStanding:', error);
+        console.error('Error in checkAndProceedToNextTurn:', error);
+    }
+}
+
+function moveToNextPlayerTurn(playerIds) { // Move to the Next Player's Turn
+    try {
+        let currentIndex = playerIds.indexOf(currentPlayerTurn);
+        clearPlayerTimer(currentPlayerTurn);
+
+        let attempts = 0;
+        do {
+            currentIndex = (currentIndex + 1) % playerIds.length;
+            currentPlayerTurn = playerIds[currentIndex];
+            attempts++;
+        } while (attempts < playerIds.length && (!userMap[currentPlayerTurn] || lives[userMap[currentPlayerTurn].name] <= 0));
+
+        if (attempts >= playerIds.length) {
+            log("All players are out of lives. Game Over or Reset required.", 'moveToNextPlayerTurn');
+            currentPlayerTurn = null;
+            gameInProgress = false;
+            io.emit('gameOver', 'All players are out of lives. Game Over!');
+        } else {
+            emitCurrentTurn();
+            startPlayerTimer(currentPlayerTurn);
+        }
+    } catch (error) {
+        console.error('Error in moveToNextPlayerTurn:', error);
     }
 }
 
@@ -266,20 +309,24 @@ function isValidGuessInput(socket, word) { // Validates the player's guess input
 function handleInvalidGuess(socket) { // Handles an invalid guess by decrementing the player's lives and updating the game state
     socket.emit('invalidWord', 'The word is not valid');
     lives[socket.username] = (lives[socket.username] || 0) - 1;
+    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleInvalidGuess'); // Log lives remaining
     updateAllPlayers();
     if (lives[socket.username] <= 0) {
         socket.emit('gameOver');
-        console.log(`${socket.username} has 0 lives`);
-        checkForLastPlayerStanding();
+        log(`${socket.username} has 0 lives`, 'handleInvalidGuess'); // Log when player has 0 lives
+        checkAndProceedToNextTurn();
     }
 }
 
-async function checkWordValidity(word) { // Checks if the guessed word is a valid English word using the Datamuse API
+async function checkWordValidity(word) { // Checks if a word is valid using the Datamuse API
     try {
         const response = await axios.get(`https://api.datamuse.com/words?sp=${word}&md=d`);
+        if (response.data.length === 0 || response.data[0].word !== word) {
+            log(`Word validation failed for: ${word}`, 'checkWordValidity'); // Log invalid word
+        }
         return response.data.length > 0 && response.data[0].word === word;
     } catch (error) {
-        console.error('Error validating word:', error);
+        log(`Error validating word: ${word}`, 'checkWordValidity'); // Log API error
         return false;
     }
 }
@@ -289,43 +336,6 @@ function isValidGuess(word, letters) { // Checks if the guessed word contains th
     const upperWord = word.toUpperCase();
     return upperWord.includes(letter1) && upperWord.includes(letter2);
 }
-
-function nextPlayerTurn() { // Moves the game to the next player's turn
-    try {
-        const playerIds = Object.keys(userMap).filter(id => lives[userMap[id].name] > 0); // Only include players with lives
-        if (playerIds.length === 0) {
-            console.log("All players are out of lives. Game Over or Reset required.");
-            currentPlayerTurn = null;
-            gameInProgress = false;
-            io.emit('gameOver', 'All players are out of lives. Game Over!');
-            return;
-        }
-
-        let currentIndex = playerIds.indexOf(currentPlayerTurn);
-        clearPlayerTimer(currentPlayerTurn); // Clear the timer of the current player
-
-        let attempts = 0;
-        do {
-            currentIndex = (currentIndex + 1) % playerIds.length;
-            currentPlayerTurn = playerIds[currentIndex];
-            attempts++;
-        } while (attempts < playerIds.length && (!userMap[currentPlayerTurn] || lives[userMap[currentPlayerTurn].name] <= 0)); // Exclude players with 0 lives
-
-        if (attempts >= playerIds.length) {
-            console.log("All players are out of lives. Game Over or Reset required.");
-            currentPlayerTurn = null;
-            gameInProgress = false;
-            io.emit('gameOver', 'All players are out of lives. Game Over!');
-        } else {
-            emitCurrentTurn();
-            startPlayerTimer(currentPlayerTurn); // Start timer for the next player's turn
-        }
-    } catch (error) {
-        console.error('Error in nextPlayerTurn:', error);
-    }
-}
-
-
 
 
 function typingHandler(socket) { // Handles a player typing a message and broadcasts it to all other players
@@ -338,11 +348,12 @@ function typingHandler(socket) { // Handles a player typing a message and broadc
     };
 }
 
-function handlePlayerDisconnect(socket) { // Handles a player disconnecting from the gamenpm install mocha chai socket.io-client --save-dev
+// Handle Player Disconnect
+function handlePlayerDisconnect(socket) {
     try {
         if (socket.username) {
-            console.log(`Player disconnected: ${socket.username}`);
-            console.log(`Total connected sockets: ${io.engine.clientsCount}`);
+            log(`Player disconnected: ${socket.username}`, 'handlePlayerDisconnect');
+            log(`Total connected sockets: ${io.engine.clientsCount}`, 'handlePlayerDisconnect');
 
             const wasCurrentPlayerTurn = socket.id === currentPlayerTurn;
             delete scores[socket.username];
@@ -355,19 +366,18 @@ function handlePlayerDisconnect(socket) { // Handles a player disconnecting from
 
             updateAllPlayers();
             updatePlayerStatus();
-            logAllPlayers();
 
             if (wasCurrentPlayerTurn && gameInProgress) {
-                nextPlayerTurn();
+                checkAndProceedToNextTurn();
             }
 
             if (io.engine.clientsCount === 0) {
                 resetPlayerState();
-                console.log(`All players have been disconnected`);
+                log(`All players have been disconnected`, 'handlePlayerDisconnect');
             }
         }
     } catch (error) {
-        handleError(socket, error);
+        handleError(socket, error, 'handlePlayerDisconnect');
     }
 }
 
@@ -383,6 +393,8 @@ function startPlayerTimer(socketId) { // Starts the timer for a player's turn
             clearInterval(playerTimer[socketId]); // Clear the timer when time runs out
             const username = userMap[socketId]?.name;
             if (username) {
+                
+                log(`Timer ran out for ${username}`, 'startPlayerTimer'); // Log when the timer runs out for the player
                 // Deduct a life if the player runs out of time
                 lives[username] = (lives[username] || 1) - 1;
                 updateAllPlayers(); // Update all players with the new game state
@@ -390,12 +402,12 @@ function startPlayerTimer(socketId) { // Starts the timer for a player's turn
                 // Check if the player has run out of lives
                 if (lives[username] <= 0) {
                     io.to(socketId).emit('gameOver'); // Notify the player they are out of lives
-                    console.log(`${username} is out of lives!`);
-                    checkForLastPlayerStanding(); // Check if there is only one player left
+                    log(`${username} is out of lives!`, 'startPlayerTimer'); // Log when a player is out of lives
+                    checkAndProceedToNextTurn(); // Check if there is only one player left
                 }
                 
                 // Move to the next player's turn, even if the current player is out of lives
-                nextPlayerTurn();
+                checkAndProceedToNextTurn();
             }
             io.emit('timerUpdate', null); // Clear the timer display on the client side
         }
@@ -414,9 +426,8 @@ function clearPlayerTimer(socketId) { // Clears the timer for a player's turn
 // Socket Connection Handling
 io.on('connection', socket => {
     try {
-        console.log(`New player connected: ${socket.id}`);
-        console.log(`Total connected sockets: ${io.engine.clientsCount}`);
-        logAllPlayers();
+        log(`New player connected: ${socket.id}`, 'connection'); // Log the new player connection
+        log(`Total connected sockets: ${io.engine.clientsCount}`, 'connection'); // Log the total connected players
         totalPlayers++;
         socket.on('setUsername', setUsernameHandler(socket));
         socket.on('guess', guessHandler(socket));
@@ -435,5 +446,5 @@ io.on('connection', socket => {
 // Server Initialization
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    log(`Server is running on port ${PORT}`, 'server.listen');
 });
