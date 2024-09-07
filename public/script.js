@@ -10,6 +10,7 @@ const elements = {
     submitGuess: document.getElementById('submitGuess'),
     scoreBoard: document.getElementById('scoreBoard'),
     readyButton: document.getElementById('readyButton'),
+    unreadyButton: document.getElementById('unreadyButton'),
     playerTypingStatus: document.getElementById('playerTypingStatus'),
     playerList: document.getElementById('playerList')
 };
@@ -20,6 +21,7 @@ let gameInProgress = false;
 
 function initializeEventListeners() {
     elements.readyButton.addEventListener('click', handleReadyClick);
+    elements.unreadyButton.addEventListener('click', handleUnreadyClick);
     elements.joinGameButton.addEventListener('click', handleJoinGameClick);
     elements.wordGuess.addEventListener('input', handleWordGuessInput);
     elements.wordGuess.addEventListener('keypress', handleWordGuessKeypress);
@@ -96,8 +98,19 @@ function updateScoreBoard(scores, lives) {
 }
 
 function handleReadyClick() {
-    socket.emit('playerReady');
-    elements.readyButton.disabled = true;
+    if (!elements.readyButton.disabled) {
+        socket.emit('playerReady');
+        elements.readyButton.disabled = true;
+        elements.unreadyButton.disabled = false;
+    }
+}
+
+function handleUnreadyClick() {
+    if (!elements.unreadyButton.disabled){    
+        socket.emit('playerUnready');
+        elements.unreadyButton.disabled = true;
+        elements.readyButton.disabled = false;
+    }
 }
 
 function handleJoinGameClick() {
@@ -118,6 +131,8 @@ function handleJoinGameClick() {
 
     elements.joinGameButton.style.display = 'none';
     elements.readyButton.style.display = 'inline';
+    elements.unreadyButton.style.display = 'inline';
+    elements.unreadyButton.disabled = true;  // Keep disabled initially
 }
 
 function handleWordGuessInput() {

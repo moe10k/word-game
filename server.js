@@ -169,6 +169,25 @@ function playerReadyHandler(socket) { // Handles a player's ready status and sta
     };
 }
 
+function playerUnreadyHandler(socket) {
+    return function() {
+        try {
+            if (gameInProgress) {
+                socket.emit('actionBlocked', 'Game in progress. Wait for the next round.');
+                return;
+            }
+            log(`${socket.username} is Unready!`, 'playerUnreadyHandler'); // Log the player's unready status
+            readyPlayers--;
+            if (userMap[socket.id]) {
+                userMap[socket.id].ready = false;
+                updatePlayerStatus();
+            }
+        } catch (error) {
+            handleError(socket, error, 'playerUnreadyHandler');
+        }
+    };
+}
+
 function checkAllPlayersReady() { // Checks if all players are ready and starts the game if they are
     const allReady = Object.values(userMap).every(user => user.ready);
     if (allReady && Object.keys(userMap).length > 1) {
@@ -432,6 +451,7 @@ io.on('connection', socket => {
         socket.on('setUsername', setUsernameHandler(socket));
         socket.on('guess', guessHandler(socket));
         socket.on('playerReady', playerReadyHandler(socket));
+        socket.on('playerUnready', playerUnreadyHandler(socket));
         socket.on('typing', typingHandler(socket));
         socket.on('resetGameRequest', () => {
             resetPlayerState(socket.id);
