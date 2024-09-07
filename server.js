@@ -115,8 +115,8 @@ function guessHandler(socket) { // Handles a player's guess and validates the in
 
             if (!isValidGuessInput(socket, word)) {
                 handleInvalidGuess(socket);
+                clearPlayerTimer(socket.id); // Clear player timer after invalid guess
                 checkAndProceedToNextTurn();
-                clearPlayerTimer(socket.id);
                 return;
             }
 
@@ -124,20 +124,21 @@ function guessHandler(socket) { // Handles a player's guess and validates the in
             if (isValidWord && isValidGuess(word, currentLetters)) {
                 log(`${socket.username} guessed correctly`, 'guessHandler'); // Log correct guess
                 processValidGuess(socket, word);
-                clearPlayerTimer(socket.id);
             } else {
                 log(`${socket.username} guessed incorrectly`, 'guessHandler'); // Log incorrect guess
                 handleInvalidGuess(socket);
-                clearPlayerTimer(socket.id);
             }
 
-            checkAndProceedToNextTurn();
-            clearPlayerTimer(socket.id);
+            clearPlayerTimer(socket.id); // Clear player timer after guess handling
+            checkAndProceedToNextTurn(); // Move to the next turn
+            updateAllPlayers(); // Update all players with the new game state
+
         } catch (error) {
             handleError(socket, error, 'guessHandler');
         }
     };
 }
+
 
 function updatePlayerStatus() { // Updates all connected players with the current player status (ready or not)
     const playerStatus = Object.values(userMap).map(({ name, ready }) => ({
@@ -218,13 +219,6 @@ function emitCurrentTurn() { // Emits the current player's turn to all connected
     } catch (error) {
         console.error('Error in emitCurrentTurn:', error);
     }
-}
-
-function processValidGuess(socket, word) { // Processes a valid guess by updating the game state and notifying all players
-    scores[socket.username] = (scores[socket.username] || 0) + 1;
-    currentLetters = generateRandomLetters();
-    log(`Current Letters: ${currentLetters}`, 'processValidGuess'); // Log the current letters
-    updateAllPlayers();
 }
 
 function resetPlayerState() { // Resets the game state for all players and notifies them to reset their UI
@@ -317,24 +311,20 @@ function hasPlayerLives(socket) { // Checks if the player has any lives remainin
     return true;
 }
 
+function processValidGuess(socket, word) { // Processes a valid guess by updating the game state and notifying all players
+    scores[socket.username] = (scores[socket.username] || 0) + 1;
+    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'processValidGuess'); // Log lives remaining
+    currentLetters = generateRandomLetters(); // New letter for when a player guesses correctly
+    log(`Current Letters: ${currentLetters}`, 'processValidGuess'); // Log the new current letters
+    updateAllPlayers();
+}
+
 function isValidGuessInput(socket, word) { // Validates the player's guess input
     if (!word || typeof word !== 'string' || word.trim().length === 0) {
         socket.emit('invalidWord', 'Invalid guess.');
         return false;
     }
     return true;
-}
-
-function handleInvalidGuess(socket) { // Handles an invalid guess by decrementing the player's lives and updating the game state
-    socket.emit('invalidWord', 'The word is not valid');
-    lives[socket.username] = (lives[socket.username] || 0) - 1;
-    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleInvalidGuess'); // Log lives remaining
-    updateAllPlayers();
-    if (lives[socket.username] <= 0) {
-        socket.emit('gameOver');
-        log(`${socket.username} has 0 lives`, 'handleInvalidGuess'); // Log when player has 0 lives
-        checkAndProceedToNextTurn();
-    }
 }
 
 async function checkWordValidity(word) { // Checks if a word is valid using the Datamuse API
@@ -356,6 +346,18 @@ function isValidGuess(word, letters) { // Checks if the guessed word contains th
     return upperWord.includes(letter1) && upperWord.includes(letter2);
 }
 
+function handleInvalidGuess(socket) { // Handles an invalid guess by decrementing the player's lives and updating the game state
+    socket.emit('invalidWord', 'The word is not valid');
+    lives[socket.username] = (lives[socket.username] || 0) - 1;
+    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleInvalidGuess'); // Log lives remaining
+    log(`Current Letters: ${currentLetters}`, 'handleInvalidGuess'); // Log the same current letters
+    updateAllPlayers();
+    if (lives[socket.username] <= 0) {
+        socket.emit('gameOver');
+        log(`${socket.username} has 0 lives`, 'handleInvalidGuess'); // Log when player has 0 lives
+        checkAndProceedToNextTurn();
+    }
+}
 
 function typingHandler(socket) { // Handles a player typing a message and broadcasts it to all other players
     return function({ username, text }) {
@@ -367,8 +369,7 @@ function typingHandler(socket) { // Handles a player typing a message and broadc
     };
 }
 
-// Handle Player Disconnect
-function handlePlayerDisconnect(socket) {
+function handlePlayerDisconnect(socket) { // Handles a player disconnecting from the game
     try {
         if (socket.username) {
             log(`Player disconnected: ${socket.username}`, 'handlePlayerDisconnect');
@@ -413,13 +414,13 @@ function startPlayerTimer(socketId) { // Starts the timer for a player's turn
             const username = userMap[socketId]?.name;
             if (username) {
                 
+                lives[username] = (lives[username] || 1) - 1; // Deduct a life if the player runs out of time
                 log(`Timer ran out for ${username}`, 'startPlayerTimer'); // Log when the timer runs out for the player
-                // Deduct a life if the player runs out of time
-                lives[username] = (lives[username] || 1) - 1;
+                log(`${username} now has ${lives[username]} lives left`, 'startPlayerTimer'); // Log lives remaining
+                log(`Current Letters: ${currentLetters}`, 'startPlayerTimer'); // Log the same current letters
                 updateAllPlayers(); // Update all players with the new game state
 
-                // Check if the player has run out of lives
-                if (lives[username] <= 0) {
+                if (lives[username] <= 0) {// Check if the player has run out of lives
                     io.to(socketId).emit('gameOver'); // Notify the player they are out of lives
                     log(`${username} is out of lives!`, 'startPlayerTimer'); // Log when a player is out of lives
                     checkAndProceedToNextTurn(); // Check if there is only one player left
