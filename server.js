@@ -433,6 +433,24 @@ function clearPlayerTimer(socketId) { // Clears the timer for a player's turn
     io.emit('typingCleared');
 }
 
+function handleFreeSkip(socket) {
+    try {
+        if (socket.id !== currentPlayerTurn) {
+            socket.emit('actionBlocked', 'You can only skip on your turn.');
+            return;
+        }
+
+        if (hasPlayerLives(socket)) {
+            log(`${socket.username} used their free skip.`, 'handleFreeSkip');
+            currentLetters = generateRandomLetters(); // Change the letters for the game
+            log(`New Letters: ${currentLetters}`, 'handleFreeSkip'); // Log the new letters
+            updateAllPlayers(); // Update all players with the new letters and state
+            checkAndProceedToNextTurn(); // Move to the next player's turn
+        }
+    } catch (error) {
+        handleError(socket, error, 'handleFreeSkip');
+    }
+}
 
 
 // Socket Connection Handling
@@ -451,6 +469,7 @@ io.on('connection', socket => {
         socket.on('disconnect', () => handlePlayerDisconnect(socket));
         socket.on('playerReady', () => setPlayerReady(socket, true));
         socket.on('playerUnready', () => setPlayerReady(socket, false));
+        socket.on('freeSkip', () => handleFreeSkip(socket));
     } catch (error) {
         console.error('Error during socket connection:', error);
     }
