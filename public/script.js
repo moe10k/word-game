@@ -18,6 +18,8 @@ const elements = {
 let myUsername = null;
 let isGameOver = false;
 let gameInProgress = false;
+let hasUsedSkip = false;
+
 
 function initializeEventListeners() {
     elements.readyButton.addEventListener('click', handleReadyClick);
@@ -44,6 +46,13 @@ function initializeSocketEventHandlers() {
     socket.on('timerUpdate', updateTimerDisplay);
     socket.on('gameReset', resetFrontendUI);
     socket.on('turnEnded', clearInputAndTypingStatus);
+    document.getElementById('freeSkip').addEventListener('click', function () {
+        if (!hasUsedSkip) {
+            socket.emit('freeSkip');
+            hasUsedSkip = true; // Mark that the player has used their skip.
+            document.getElementById('freeSkip').disabled = true; // Disable the skip button after use.
+        }
+    });
 }
 
 function updatePlayerList(playerStatus) {
@@ -198,6 +207,7 @@ function handleTurnUpdate(currentTurnUsername) {
     const isMyTurn = myUsername === currentTurnUsername;
     elements.wordGuess.disabled = !isMyTurn;
     elements.submitGuess.disabled = !isMyTurn;
+    document.getElementById('freeSkip').disabled = !isMyTurn || hasUsedSkip; // Enable free skip only if it's their turn and they haven't used it yet.
     document.getElementById('currentTurn').textContent = currentTurnUsername;
 }
 
