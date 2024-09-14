@@ -102,34 +102,19 @@ function setUsernameHandler(socket) { // Handles setting the username for a play
 function guessHandler(socket) { // Handles a player's guess and validates the input
     return async function (word) {
         try {
-            if (!gameInProgress) {
-                socket.emit('actionBlocked', 'The game is not in progress.');
-                return;
-            }
+            if (!canPlayerGuess(socket)) return; // New helper function to check if the player can guess
 
-            if (!isPlayersTurn(socket) || !hasPlayerLives(socket)) {
-                return;
-            }
+            log(`${socket.username} guessed: ${word}`, 'guessHandler');
 
-            log(`${socket.username} guessed: ${word}`, 'guessHandler'); // Log the player's guess
+            const isValid = await handleGuessValidation(socket, word); // New function to handle guess validation
 
-            if (!isValidGuessInput(socket, word)) {
+            clearPlayerTimer(socket.id);
+            if (!isValid) { // Handle invalid guesses
                 handleInvalidGuess(socket);
-                clearPlayerTimer(socket.id); // Clear player timer after invalid guess
-                checkAndProceedToNextTurn();
-                return;
+            } else { // Process valid guesses
+                handleValidGuess(socket, word);
             }
 
-            const isValidWord = await checkWordValidity(word);
-            if (isValidWord && isValidGuess(word, currentLetters)) {
-                log(`${socket.username} guessed correctly`, 'guessHandler'); // Log correct guess
-                processValidGuess(socket, word);
-            } else {
-                log(`${socket.username} guessed incorrectly`, 'guessHandler'); // Log incorrect guess
-                handleInvalidGuess(socket);
-            }
-
-            clearPlayerTimer(socket.id); // Clear player timer after guess handling
             checkAndProceedToNextTurn(); // Move to the next turn
             updateAllPlayers(); // Update all players with the new game state
 
@@ -138,6 +123,35 @@ function guessHandler(socket) { // Handles a player's guess and validates the in
         }
     };
 }
+
+function canPlayerGuess(socket) { // Check if the player can guess
+    if (!gameInProgress) { // Check if the game is in progress
+        socket.emit('actionBlocked', 'The game is not in progress.');
+        return false;
+    }
+
+    if (!isPlayersTurn(socket) || !hasPlayerLives(socket)) { // Check if it is the player's turn and they have lives
+        return false;
+    }
+
+    return true;
+}
+
+async function handleGuessValidation(socket, word) { // Validate the player's guess
+    if (!isValidGuessInput(socket, word)) {
+        return false;
+    }
+
+    const isValidWord = await checkWordValidity(word);
+    if (isValidWord && isValidGuess(word, currentLetters)) {
+        log(`${socket.username} guessed correctly`, 'handleGuessValidation');
+        return true;
+    } else {
+        log(`${socket.username} guessed incorrectly`, 'handleGuessValidation');
+        return false;
+    }
+}
+
 
 
 function updatePlayerStatus() { // Updates all connected players with the current player status (ready or not)
@@ -148,45 +162,23 @@ function updatePlayerStatus() { // Updates all connected players with the curren
     io.emit('playerStatusUpdate', playerStatus);
 }
 
-function playerReadyHandler(socket) { // Handles a player's ready status and starts the game if all players are ready
-    return function() {
-        try {
-            if (gameInProgress) {
-                socket.emit('actionBlocked', 'Game in progress. Wait for the next round.');
-                return;
-            }
-            log(`${socket.username} is Ready!`, 'playerReadyHandler'); // Log the player's ready status
-            readyPlayers++;
-            if (userMap[socket.id]) {
-                userMap[socket.id].ready = true;
-                scores[socket.username] = scores[socket.username] || 0;
-                updatePlayerStatus();
-                checkAllPlayersReady();
-
-            }
-        } catch (error) {
-            handleError(socket, error, 'playerReadyHandler');
+function setPlayerReady(socket, isReady) {
+    try {
+        if (gameInProgress) {
+            socket.emit('actionBlocked', 'Game in progress. Wait for the next round.');
+            return;
         }
-    };
-}
-
-function playerUnreadyHandler(socket) {
-    return function() {
-        try {
-            if (gameInProgress) {
-                socket.emit('actionBlocked', 'Game in progress. Wait for the next round.');
-                return;
-            }
-            log(`${socket.username} is Unready!`, 'playerUnreadyHandler'); // Log the player's unready status
-            readyPlayers--;
-            if (userMap[socket.id]) {
-                userMap[socket.id].ready = false;
-                updatePlayerStatus();
-            }
-        } catch (error) {
-            handleError(socket, error, 'playerUnreadyHandler');
+        log(`${socket.username} is ${isReady ? 'Ready' : 'Unready'}!`, 'setPlayerReady');
+        readyPlayers += isReady ? 1 : -1;
+        if (userMap[socket.id]) {
+            userMap[socket.id].ready = isReady;
+            scores[socket.username] = scores[socket.username] || 0;
+            updatePlayerStatus();
+            checkAllPlayersReady();
         }
-    };
+    } catch (error) {
+        handleError(socket, error, 'setPlayerReady');
+    }
 }
 
 function checkAllPlayersReady() { // Checks if all players are ready and starts the game if they are
@@ -311,11 +303,24 @@ function hasPlayerLives(socket) { // Checks if the player has any lives remainin
     return true;
 }
 
-function processValidGuess(socket, word) { // Processes a valid guess by updating the game state and notifying all players
+function handleInvalidGuess(socket) { // Handles an invalid guess by decrementing the player's lives and updating the game state
+    socket.emit('invalidWord', 'The word is not valid');
+    lives[socket.username] = (lives[socket.username] || 0) - 1;
+    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleInvalidGuess'); // Log lives remaining
+    log(`Current Letters: ${currentLetters}`, 'handleInvalidGuess'); // Log the same current letters
+    updateAllPlayers();
+    if (lives[socket.username] <= 0) {
+        socket.emit('gameOver');
+        log(`${socket.username} has 0 lives`, 'handleInvalidGuess'); // Log when player has 0 lives
+        checkAndProceedToNextTurn();
+    }
+}
+
+function handleValidGuess(socket, word) { // Processes a valid guess by updating the game state and notifying all players
     scores[socket.username] = (scores[socket.username] || 0) + 1;
-    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'processValidGuess'); // Log lives remaining
+    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleValidGuess'); // Log lives remaining
     currentLetters = generateRandomLetters(); // New letter for when a player guesses correctly
-    log(`Current Letters: ${currentLetters}`, 'processValidGuess'); // Log the new current letters
+    log(`Current Letters: ${currentLetters}`, 'handleValidGuess'); // Log the new current letters
     updateAllPlayers();
 }
 
@@ -344,19 +349,6 @@ function isValidGuess(word, letters) { // Checks if the guessed word contains th
     const [letter1, letter2] = letters.split('');
     const upperWord = word.toUpperCase();
     return upperWord.includes(letter1) && upperWord.includes(letter2);
-}
-
-function handleInvalidGuess(socket) { // Handles an invalid guess by decrementing the player's lives and updating the game state
-    socket.emit('invalidWord', 'The word is not valid');
-    lives[socket.username] = (lives[socket.username] || 0) - 1;
-    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleInvalidGuess'); // Log lives remaining
-    log(`Current Letters: ${currentLetters}`, 'handleInvalidGuess'); // Log the same current letters
-    updateAllPlayers();
-    if (lives[socket.username] <= 0) {
-        socket.emit('gameOver');
-        log(`${socket.username} has 0 lives`, 'handleInvalidGuess'); // Log when player has 0 lives
-        checkAndProceedToNextTurn();
-    }
 }
 
 function typingHandler(socket) { // Handles a player typing a message and broadcasts it to all other players
@@ -441,6 +433,24 @@ function clearPlayerTimer(socketId) { // Clears the timer for a player's turn
     io.emit('typingCleared');
 }
 
+function handleFreeSkip(socket) {
+    try {
+        if (socket.id !== currentPlayerTurn) {
+            socket.emit('actionBlocked', 'You can only skip on your turn.');
+            return;
+        }
+
+        if (hasPlayerLives(socket)) {
+            log(`${socket.username} used their free skip.`, 'handleFreeSkip');
+            currentLetters = generateRandomLetters(); // Change the letters for the game
+            log(`New Letters: ${currentLetters}`, 'handleFreeSkip'); // Log the new letters
+            updateAllPlayers(); // Update all players with the new letters and state
+            checkAndProceedToNextTurn(); // Move to the next player's turn
+        }
+    } catch (error) {
+        handleError(socket, error, 'handleFreeSkip');
+    }
+}
 
 
 // Socket Connection Handling
@@ -451,14 +461,15 @@ io.on('connection', socket => {
         totalPlayers++;
         socket.on('setUsername', setUsernameHandler(socket));
         socket.on('guess', guessHandler(socket));
-        socket.on('playerReady', playerReadyHandler(socket));
-        socket.on('playerUnready', playerUnreadyHandler(socket));
         socket.on('typing', typingHandler(socket));
         socket.on('resetGameRequest', () => {
             resetPlayerState(socket.id);
         });
         socket.on('clearTyping', () => socket.broadcast.emit('typingCleared'));
         socket.on('disconnect', () => handlePlayerDisconnect(socket));
+        socket.on('playerReady', () => setPlayerReady(socket, true));
+        socket.on('playerUnready', () => setPlayerReady(socket, false));
+        socket.on('freeSkip', () => handleFreeSkip(socket));
     } catch (error) {
         console.error('Error during socket connection:', error);
     }
