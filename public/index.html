@@ -1,3 +1,4 @@
+<!--index.html-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -31,9 +32,8 @@
         <input type="text" id="usernameInput" placeholder="Enter your username">
         <button id="joinGame">Join Game</button>
         <button id="readyButton" style="display: none;">Ready</button>
+        <button id="unreadyButton" style="display: none;" disabled>Unready</button>
         <div id="playerList"></div>
-        <!--<div id="playerReadinessStatus">Ready Players: <span id="readinessFraction">0/0</span></div>-->
-
     </div>
 
     <div id="game" style="display: none;">
@@ -41,11 +41,14 @@
         <div id="letters">Letters: <span id="letterDisplay"></span></div>
         <input type="text" id="wordGuess" placeholder="Enter your guess">
         <button id="submitGuess">Submit Guess</button>
+        <button id="freeSkip" disabled>Free Skip</button>
         <div id="player-statuses"><!-- Player statuses will be dynamically inserted here --></div>
         <div id="playerTypingStatus"></div>
         <div id="globalTypingDisplay" class="typing-display"></div>
-
+        <div id="timerDisplay"></div>
     </div>
+
+    <div id="messageBox" style="display:none;"></div>
 
 
     <!-- The Modal -->
@@ -65,7 +68,7 @@
     </div>
 
     <div class="container">
-        <div class="bottom-right-text">V1.0.0</div>
+        <div class="bottom-right-text">V2.8.0</div>
     </div>
 
 

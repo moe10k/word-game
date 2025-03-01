@@ -1,3 +1,4 @@
+/*styles.css*/
 @import url('https://fonts.googleapis.com/css?family=Exo:400,700');
 
 *{
@@ -27,15 +28,20 @@ body{
 }
 
 
-.area{
-    position: fixed; /* Fix the position */
+.area {
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: -1; /* Send it to the back */
-    background: #4e54c8;  
-    background: -webkit-linear-gradient(to left, #8f94fb, #4e54c8);  
+    z-index: -1;
+    background: linear-gradient(to left, #22256b, #a43690);
+    animation: backgroundTransition 10s ease-in-out infinite;
+}
+
+@keyframes backgroundTransition {
+    25%, 50% { background: linear-gradient(to left, #24286a, #a33a90); } /* Pink */
+    75%, 100% { background: linear-gradient(to left, #262a75, #963384); } /* Pink */
 }
 
 .circles{
@@ -54,7 +60,7 @@ body{
     width: 20px;
     height: 20px;
     background: rgba(255, 255, 255, 0.2);
-    animation: animate 25s linear infinite;
+    animation: animate 10s linear infinite;
     bottom: -150px;
     
 }
@@ -161,6 +167,13 @@ body{
     margin-right: 20px; /* Spacing between sidebar and main content */
 }
 
+#scoreBoard {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%; /* Adjust width as needed */
+}
+
 #scoreBoard, #livesDisplay{
 
     width: 200px; /* Adjust the width as needed */
@@ -169,7 +182,7 @@ body{
 
 
 #usernameScreen, #game {
-    margin-top: 20px;
+    margin-top: 80px;
 }
 
 input[type="text"] {
@@ -221,13 +234,42 @@ button:hover {
     background-repeat: no-repeat;
 }
 
+#globalTypingDisplay {
+    color: white;
+    font-size: 20px;
+    text-shadow: 1px 1px 2px #000000b5;
+}
+
+.player-ready {
+    color: rgb(13, 142, 13);
+    font-size: 20px;
+    text-shadow: 1px 1px 2px #000000b5;
+}
+
+.player-not-ready {
+    color: rgb(197, 18, 18);
+    font-size: 20px;
+    text-shadow: 1px 1px 2px #000000b5;
+}
+
 .player-score {
+    display: flex;
+    justify-content: space-between; /* Align player name and score on opposite ends */
+    align-items: center;
+    width: 100%; /* Make sure the player-score takes the full width */
     font-size: 16px;
     color: white;
-    padding: 10px 20px;
-    margin: 5px;
+    padding: 5px 0; /* Reduced padding for better spacing */
     text-shadow: 1px 1px 2px #000;
-    margin-bottom: 20px;
+    white-space: nowrap; /* Prevent text from wrapping to the next line */
+    overflow: hidden; /* Hide overflow if the text is too long */
+    text-overflow: ellipsis; /* Show ellipsis if the text is too long */
+}
+
+.player-name {
+    overflow: hidden; /* Hide overflow */
+    text-overflow: ellipsis; /* Show ellipsis for long names */
+    white-space: nowrap; /* Prevent text wrapping */
 }
 
 /*  turns  */
@@ -250,7 +292,20 @@ button:hover {
 
 .typing-status {
     font-style: italic;
+    flex: 1; /* Allow the typing status to take remaining space if needed */
 }
+
+#messageBox {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: white;
+    padding: 10px;
+    border: 1px solid black;
+    z-index: 1000;
+}
+
 
 
 
@@ -259,40 +314,43 @@ button:hover {
 
 /* The Modal (background) */
 .modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1; /* Sit on top */
+    display: none;
+    position: fixed;
+    z-index: 100; /* Make sure this is higher than other elements */
     left: 0;
     top: 0;
-    width: 100%; /* Full width */
-    height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.7); /* Darker background for better visibility */
 }
 
-/* Modal Content */
 .modal-content {
     background-color: #fefefe;
-    margin: 10% auto; /* 10% from the top and centered */
+    margin: 15% auto;
     padding: 20px;
     border-radius: 10px;
     box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
-    width: 50%; /* Adjusted for better responsiveness */
+    width: 50%;
+    min-width: 300px; /* Ensure it's not too small on mobile */
+    position: relative; /* For positioning the close button */
 }
 
-/* Modal Header */
 .modal-header {
     padding: 10px 20px;
-    background: red;
+    background: #4CAF50; /* Green header for winning */
     color: white;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
+    text-align: center;
 }
 
-/* Modal Body */
-.modal-body {padding: 20px;}
+.modal-body {
+    padding: 20px;
+    text-align: center;
+    font-size: 1.2em;
+}
 
-/* Modal Footer */
 .modal-footer {
     padding: 10px 20px;
     background: #f1f1f1;
@@ -303,44 +361,25 @@ button:hover {
 
 /* Button Style */
 #resetGame {
-    background-color: red; /* Green */
-    border: none;
+    background-color: #4CAF50;
     color: white;
-    padding: 10px 20px;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-    margin: 4px 2px;
-    transition-duration: 0.4s;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
     cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
 }
 
 #resetGame:hover {
-    background-color: white;
-    color: black;
-    border: 2px solid #4CAF50;
+    background-color: #45a049;
 }
-  
-  /* The Close Button
-  .close {
-    color: #aaa;
-    float: right;
-    font-size: 28px;
+
+#winnerName {
     font-weight: bold;
-  }
-  
-  .close:hover,
-  .close:focus {
-    color: black;
-    text-decoration: none;
-    cursor: pointer;
-  }
-  */
+    color: #4CAF50;
+}
 
-
-
-/* version number*/
 
 .bottom-right-text {
     position: absolute; /* Position the text absolutely within the container */

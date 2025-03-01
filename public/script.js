@@ -1,7 +1,5 @@
-// Connect to the server using Socket.IO
+//script.js
 const socket = io();
-
-// Retrieve HTML elements for game interaction
 const elements = {
     usernameScreen: document.getElementById('usernameScreen'),
     usernameInput: document.getElementById('usernameInput'),
@@ -12,29 +10,25 @@ const elements = {
     submitGuess: document.getElementById('submitGuess'),
     scoreBoard: document.getElementById('scoreBoard'),
     readyButton: document.getElementById('readyButton'),
+    unreadyButton: document.getElementById('unreadyButton'),
     playerTypingStatus: document.getElementById('playerTypingStatus'),
-    //readinessFraction: document.getElementById('readinessFraction'),
     playerList: document.getElementById('playerList')
 };
 
-let myUsername = null; // Variable to store the player's username
-let isGameOver = false; // Global variable to track the game over state
+let myUsername = null;
+let isGameOver = false;
 let gameInProgress = false;
+let hasUsedSkip = false;
 
 
 function initializeEventListeners() {
     elements.readyButton.addEventListener('click', handleReadyClick);
+    elements.unreadyButton.addEventListener('click', handleUnreadyClick);
     elements.joinGameButton.addEventListener('click', handleJoinGameClick);
     elements.wordGuess.addEventListener('input', handleWordGuessInput);
-    elements.wordGuess.addEventListener('keypress', function(event) {// Add 'keypress' event listener to the wordGuess input field
-        if (event.key === 'Enter') {  // Check if the pressed key is Enter
-            handleSubmitGuessClick();  // Call the submit guess function
-            event.preventDefault();    // Prevent default form submission behavior
-        }
-    });
+    elements.wordGuess.addEventListener('keypress', handleWordGuessKeypress);
     elements.submitGuess.addEventListener('click', handleSubmitGuessClick);
 }
-
 
 function initializeSocketEventHandlers() {
     socket.on('playerTyping', handlePlayerTyping);
@@ -43,137 +37,151 @@ function initializeSocketEventHandlers() {
     socket.on('playerStatusUpdate', updatePlayerList);
     socket.on('gameOver', handleGameOver);
     socket.on('gameWin', handleGameWin);
-    socket.on('invalidWord', (message) => alert(message));
-    //socket.on('readinessUpdate', updateReadinessDisplay);
-    socket.on('turnUpdate', (currentTurnUsername) => {
-        const isMyTurn = myUsername === currentTurnUsername;
+    socket.on('invalidWord', showMessage);
+    socket.on('notYourTurn', () => showMessage("It's not your turn!"));
+    socket.on('gameInProgress', () => showMessage('A game is currently in progress. Please wait for the next round.'));
+    socket.on('actionBlocked', showMessage);
+    socket.on('turnUpdate', handleTurnUpdate);
+    socket.on('typingCleared', clearGlobalTypingDisplay);
+    socket.on('timerUpdate', updateTimerDisplay);
+    socket.on('gameReset', resetFrontendUI);
+    socket.on('turnEnded', clearInputAndTypingStatus);
     
-        // Enable or disable input and submit button based on the current turn
-        elements.wordGuess.disabled = !isMyTurn;
-        elements.submitGuess.disabled = !isMyTurn;
+    // Add reconnection handling
+    socket.on('disconnect', () => {
+        showMessage('Connection lost. Attempting to reconnect...');
+    });
     
-        // Update the turn display
-        document.getElementById('currentTurn').textContent = currentTurnUsername;
+    socket.on('connect', () => {
+        if (myUsername) {
+            showMessage('Reconnected! Attempting to rejoin game...');
+            socket.emit('setUsername', myUsername);
+        }
     });
-    socket.on('notYourTurn', () => {
-        alert("It's not your turn!");
+    
+    socket.on('error', (errorMsg) => {
+        console.error('Socket error:', errorMsg);
+        showMessage('An error occurred. Please refresh the page if issues persist.');
     });
-
-    socket.on('typingCleared', () => {
-        document.getElementById('globalTypingDisplay').textContent = '';
-    });
-    socket.on('gameInProgress', () => {
-        alert('A game is currently in progress. Please wait for the next round.');
-    });
-    socket.on('actionBlocked', (message) => {
-        alert(message);
+    
+    // Handle free skip button
+    document.getElementById('freeSkip').addEventListener('click', function () {
+        if (!hasUsedSkip) {
+            socket.emit('freeSkip');
+            hasUsedSkip = true;
+            document.getElementById('freeSkip').disabled = true;
+        }
     });
 }
-
-
 
 function updatePlayerList(playerStatus) {
     const playerListElement = elements.playerList;
-    playerListElement.innerHTML = ''; // Clear existing list
+    playerListElement.innerHTML = '';
     playerStatus.forEach(player => {
         const playerElement = document.createElement('div');
         playerElement.textContent = `${player.name} - ${player.ready ? 'Ready' : 'Not Ready'}`;
-        playerListElement.appendChild(playerElement); // Add each player to the list
+     
+        if (player.ready) {
+            playerElement.classList.add('player-ready');
+        } else {
+            playerElement.classList.add('player-not-ready');
+        }
+        playerListElement.appendChild(playerElement);
     });
 }
 
-
 function updateScoreBoard(scores, lives) {
-    scoreBoard.innerHTML = ''; // Clear existing scores
-
+    elements.scoreBoard.innerHTML = '';
     for (const [username, score] of Object.entries(scores)) {
         const playerScoreElement = document.createElement('div');
         playerScoreElement.classList.add('player-score');
         playerScoreElement.id = `score_${username}`;
-
-        // Create a container for the heart images (lives)
         const heartsContainer = document.createElement('div');
         heartsContainer.classList.add('hearts-container');
-        const playerLives = lives[username] || 0; // Get the lives of the player
-
-        // Add heart images for lives
+        const playerLives = lives[username] || 0;
         for (let i = 0; i < playerLives; i++) {
             const fullHeart = document.createElement('span');
             fullHeart.classList.add('heart', 'full-heart');
             heartsContainer.appendChild(fullHeart);
         }
-
-        // Add empty hearts for the remaining lives
         for (let i = playerLives; i < 3; i++) {
             const emptyHeart = document.createElement('span');
             emptyHeart.classList.add('heart', 'empty-heart');
             heartsContainer.appendChild(emptyHeart);
         }
-
-        // Append the hearts container (lives) first
         playerScoreElement.appendChild(heartsContainer);
-
-        // Add the player's name
         const playerNameElement = document.createElement('span');
         playerNameElement.textContent = ` ${username}`;
         playerNameElement.classList.add('player-name');
         playerScoreElement.appendChild(playerNameElement);
-
-        // Add the player's score
         const playerScoreText = document.createElement('span');
         playerScoreText.textContent = `: ${score}`;
         playerScoreElement.appendChild(playerScoreText);
-
-        // Add a placeholder for typing status
         const typingStatus = document.createElement('div');
         typingStatus.id = `typingDisplay_${username}`;
         typingStatus.classList.add('typing-status');
         playerScoreElement.appendChild(typingStatus);
-
-        // Add the player's score element to the scoreboard
         scoreBoard.appendChild(playerScoreElement);
     }
 }
 
-/*
-function updateReadinessDisplay({ totalPlayers, readyPlayers }) {
-    elements.readinessFraction.textContent = `${readyPlayers}/${totalPlayers}`;
-}
-*/
-
-// Event Handling Functions
 function handleReadyClick() {
-    socket.emit('playerReady'); // Notify server that player is ready
-    readyButton.disabled = true; // Disable the button after clicking
+    if (!elements.readyButton.disabled) {
+        socket.emit('playerReady');
+        elements.readyButton.disabled = true;
+        elements.unreadyButton.disabled = false;
+    }
+}
+
+function handleUnreadyClick() {
+    if (!elements.unreadyButton.disabled){    
+        socket.emit('playerUnready');
+        elements.unreadyButton.disabled = true;
+        elements.readyButton.disabled = false;
+    }
 }
 
 function handleJoinGameClick() {
     const username = elements.usernameInput.value.trim();
     if (gameInProgress) {
-        alert('A game is currently in progress. Please wait for the next round.');
+        showMessage('A game is currently in progress. Please wait for the next round.');
         return;
     }
     if (!username || username.length < 3 || username.length > 20) {
-        alert('Invalid username. Must be 3-20 characters long.');
+        showMessage('Invalid username. Must be 3-20 characters long.');
         return;
     }
-
     myUsername = username;
     socket.emit('setUsername', username);
+
+    
+    elements.usernameInput.disabled = true;
+
     elements.joinGameButton.style.display = 'none';
     elements.readyButton.style.display = 'inline';
+    elements.unreadyButton.style.display = 'inline';
+    elements.unreadyButton.disabled = true;  // Keep disabled initially
 }
 
+let typingTimeout;
 function handleWordGuessInput() {
-    if (!isGameOver) { // Check if the game is not over
+    if (!isGameOver) {
         const text = elements.wordGuess.value.trim();
         socket.emit('typing', { username: myUsername, text });
+        
+        // Clear previous timeout
+        clearTimeout(typingTimeout);
+        
+        // Set a new timeout to clear typing after inactivity
+        typingTimeout = setTimeout(() => {
+            socket.emit('clearTyping');
+        }, 3000);
     }
 }
 
 function handleSubmitGuessClick() {
     socket.emit('guess', elements.wordGuess.value.trim());
-    socket.emit('clearTyping'); // This line should be added
+    socket.emit('clearTyping');
     elements.wordGuess.value = '';
 }
 
@@ -182,99 +190,174 @@ function handlePlayerTyping({ username, text }) {
     if (text) {
         typingDisplayElement.textContent = `${username} is typing: ${text}`;
     } else {
-        typingDisplayElement.textContent = ''; // Clear the text if there's no typing
+        typingDisplayElement.textContent = '';
     }
 }
 
 function handleUsernameError(message) {
-    alert(message); // Show error message to the user
-    elements.joinGameButton.style.display = 'inline'; // Show the "Join Game" button again
-    elements.readyButton.style.display = 'none'; // Hide the "Ready" button
-    elements.usernameInput.value = ''; // Optionally clear the username input
+    showMessage(message);
+    elements.usernameInput.disabled = false; 
+    elements.joinGameButton.style.display = 'inline';
+    elements.readyButton.style.display = 'none';
+    elements.usernameInput.value = '';
 }
 
 function handleGameUpdate(data) {
-    gameInProgress = data.gameStarted;
-    if (data.gameStarted) {
-        elements.gameScreen.style.display = 'block'; // Display the game screen
-        elements.usernameScreen.style.display = 'none'; // Optionally, hide the username screen
+    try {
+        gameInProgress = data.gameStarted;
+        if (data.gameStarted) {
+            elements.gameScreen.style.display = 'block';
+            elements.usernameScreen.style.display = 'none';
+        }
+        elements.letterDisplay.textContent = data.letters || '';
+        if (data.scores && data.lives) {
+            updateScoreBoard(data.scores, data.lives);
+        }
+    } catch (error) {
+        console.error('Error handling game update:', error);
+        showMessage('An error occurred updating the game state.');
     }
-    elements.letterDisplay.textContent = data.letters; // Display current letters for guessing
-    updateScoreBoard(data.scores, data.lives); // Update scoreboard with scores and lives
 }
 
 function handleGameOver() {
-    alert('You have lost all your lives!');
+    showMessage('You have lost all your lives!');
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
-    isGameOver = true; // Set the game over flag
+    isGameOver = true;
 }
 
 function handleGameWin(winnerUsername) {
+    console.log('Game win event received for winner:', winnerUsername);
+    
+    // Disable game controls
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
-    // Set the winner's name in the modal
+    
+    // Update modal content
     document.getElementById('winnerName').textContent = winnerUsername;
-
-    // Display the modal
-    var modal = document.getElementById('winnerModal');
+    
+    // Show the modal
+    const modal = document.getElementById('winnerModal');
     modal.style.display = "block";
-
     
-    /*
-    // When the user clicks on <span> (x), close the modal
-    document.getElementsByClassName("close")[0].onclick = function() {
+    // Use proper event delegation instead of recreating the button
+    document.getElementById('resetGame').onclick = function() {
+        console.log('Reset game button clicked');
+        socket.emit('resetGameRequest');
         modal.style.display = "none";
-    }
+        resetFrontendUI();
+    };
     
-    // When the user clicks anywhere outside of the modal, close it
+    // Also allow clicking outside the modal to close it
     window.onclick = function(event) {
         if (event.target === modal) {
             modal.style.display = "none";
+            socket.emit('resetGameRequest');
+            resetFrontendUI();
         }
-    }
-    */
-
-    //starts reset process when reset button clicked
-    document.getElementById('resetGame').addEventListener('click', function() {
-        socket.emit('resetGameRequest'); // Notify the server to reset the game
-        resetFrontendUI(); // Reset the frontend UI
-    });
+    };
 }
 
-function resetFrontendUI() {
-    gameInProgress = false;
-    elements.wordGuess.disabled = false;
-    elements.submitGuess.disabled = false;
+function handleTurnUpdate(currentTurnUsername) {
+    const isMyTurn = myUsername === currentTurnUsername;
+    elements.wordGuess.disabled = !isMyTurn;
+    elements.submitGuess.disabled = !isMyTurn;
+    document.getElementById('freeSkip').disabled = !isMyTurn || hasUsedSkip; // Enable free skip only if it's their turn and they haven't used it yet.
+    document.getElementById('currentTurn').textContent = currentTurnUsername;
+}
 
-    // Hide the game screen and modal, show the username screen
+function clearGlobalTypingDisplay() {
+    document.getElementById('globalTypingDisplay').textContent = '';
+}
+
+function handleWordGuessKeypress(event) {
+    if (event.key === 'Enter') {
+        handleSubmitGuessClick();
+        event.preventDefault();
+    }
+}
+
+function updateTimerDisplay(time) {
+    const timerElement = document.getElementById('timerDisplay');
+    if (time !== null) {
+        timerElement.textContent = `Time left: ${time}s`;
+    } else {
+        timerElement.textContent = '';
+    }
+}
+
+function clearInputAndTypingStatus() {
+    elements.wordGuess.value = ''; 
+    clearGlobalTypingDisplay(); 
+    socket.emit('clearTyping'); 
+}
+
+function showMessage(message) {
+    const messageBox = document.getElementById('messageBox');
+    messageBox.innerText = message;
+    messageBox.style.display = 'block';
+    setTimeout(() => messageBox.style.display = 'none', 3000);
+}
+
+// Make sure the modal CSS is correct
+function checkStylesOnLoad() {
+    // Ensure the modal starts hidden
+    const modal = document.getElementById('winnerModal');
+    if (modal) {
+        modal.style.display = "none";
+        console.log('Initial modal display style set to:', modal.style.display);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', checkStylesOnLoad);
+
+function resetFrontendUI() {
+    // Game state reset
+    isGameOver = false;
+    gameInProgress = false;
+    myUsername = null;
+    hasUsedSkip = false;
+    
+    // UI elements reset
+    elements.wordGuess.disabled = true;
+    elements.submitGuess.disabled = true;
+    elements.wordGuess.value = '';
+    elements.usernameInput.disabled = false;
+    elements.usernameInput.value = ''; 
+    
+    // Button states
+    elements.joinGameButton.style.display = 'inline';
+    elements.readyButton.style.display = 'none';
+    elements.readyButton.disabled = false;
+    elements.unreadyButton.disabled = true;
+    document.getElementById('freeSkip').disabled = true;
+    
+    // Display states
     document.getElementById('game').style.display = 'none';
     document.getElementById('winnerModal').style.display = 'none';
     document.getElementById('usernameScreen').style.display = 'block';
-
-    // Reset input fields
-    document.getElementById('usernameInput').value = '';
-    document.getElementById('wordGuess').value = '';
-
-    // Reset buttons and other interactive elements
-    document.getElementById('joinGame').style.display = 'inline';
-    document.getElementById('readyButton').style.display = 'none';
-    document.getElementById('readyButton').disabled = false;
-    document.getElementById('submitGuess').disabled = false;
-
-    // Clear dynamic content (e.g., player list, scores, typing status)
+    
+    // Clear all dynamic content
     document.getElementById('playerList').innerHTML = '';
     document.getElementById('scoreBoard').innerHTML = '';
     document.getElementById('playerTypingStatus').innerHTML = '';
     document.getElementById('livesDisplay').innerHTML = '';
-
-    // Reset any other game-specific UI elements
-    // For example, resetting the letter display or player statuses
     document.getElementById('letterDisplay').textContent = '';
     document.getElementById('player-statuses').innerHTML = '';
     document.getElementById('globalTypingDisplay').innerHTML = '';
-
-    // Add any additional UI reset logic specific to your game
+    document.getElementById('timerDisplay').textContent = '';
+    
+    // Clear any pending timers on the client side
+    clearTimeout(window.typingTimeout);
+    
+    // Inform the user
+    showMessage('Game has been reset. Please join again.');
+    
+    // Clear any remaining event listeners
+    window.onclick = null;
+    
+    // Re-initialize event listeners to ensure clean state
+    initializeEventListeners();
 }
 
 
