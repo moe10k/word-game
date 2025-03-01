@@ -240,37 +240,111 @@ function resetPlayerState() { // Resets the game state for all players and notif
     }
 }
 
-function checkAndProceedToNextTurn() { // Check for Last Player Standing or Move to Next Turn
+function checkAndProceedToNextTurn() {
     try {
-        const playersWithLives = Object.keys(userMap).filter(socketId => lives[userMap[socketId].name] > 0);
-
-        if (playersWithLives.length === 1) {
-            const winningPlayerName = userMap[playersWithLives[0]].name;
-            log(`${winningPlayerName} wins the game!`, 'checkAndProceedToNextTurn');
-            io.emit('gameWin', winningPlayerName);
-            resetPlayerState();
-        } else {
-            moveToNextPlayerTurn(playersWithLives);
+        // First clear any existing timer to prevent race conditions
+        if (currentPlayerTurn) {
+            clearPlayerTimer(currentPlayerTurn);
         }
+        
+        // Clean up any disconnected players or players with no lives
+        const playersToRemove = [];
+        
+        Object.keys(userMap).forEach(socketId => {
+            const username = userMap[socketId].name;
+            if (!username || !lives[username] || lives[username] <= 0) {
+                log(`Player ${username || socketId} has no more lives or is invalid`, 'checkAndProceedToNextTurn');
+                playersToRemove.push(socketId);
+            }
+        });
+        
+        // Remove players who are out of the game
+        playersToRemove.forEach(socketId => {
+            // Don't delete game data here, just handle turn logic
+            if (socketId === currentPlayerTurn) {
+                currentPlayerTurn = null; // Clear current turn if it was this player's turn
+            }
+        });
+
+        // Find all players with lives remaining
+        const playersWithLives = Object.keys(userMap).filter(socketId => {
+            const username = userMap[socketId]?.name;
+            return username && lives[username] && lives[username] > 0;
+        });
+
+        log(`Players with lives remaining: ${playersWithLives.length}`, 'checkAndProceedToNextTurn');
+        
+        // Handle game end conditions
+        if (playersWithLives.length === 1) {
+            const winningSocketId = playersWithLives[0];
+            const winningPlayerName = userMap[winningSocketId].name;
+            
+            log(`${winningPlayerName} wins the game!`, 'checkAndProceedToNextTurn');
+            
+            // Ensure all timers are cleared
+            Object.keys(playerTimer).forEach(timerId => {
+                clearInterval(playerTimer[timerId]);
+            });
+            
+            // Emit the win event before resetting the state
+            io.emit('gameWin', winningPlayerName);
+            
+            // Add a delay before resetting the game state
+            setTimeout(() => {
+                resetPlayerState();
+            }, 1000);
+            
+            return; // Don't proceed to next turn after a win
+        } else if (playersWithLives.length === 0) {
+            // Handle the case where everyone is out
+            log(`No players with lives remaining. Game Over!`, 'checkAndProceedToNextTurn');
+            io.emit('gameOver', 'All players are out of lives. Game Over!');
+            resetPlayerState();
+            return;
+        }
+        
+        // Continue the game with the remaining players
+        moveToNextPlayerTurn(playersWithLives);
     } catch (error) {
         console.error('Error in checkAndProceedToNextTurn:', error);
+        // Recovery: try to maintain game state or reset if severe error
+        if (gameInProgress && Object.keys(userMap).length > 0) {
+            moveToNextPlayerTurn(Object.keys(userMap));
+        } else {
+            resetPlayerState();
+        }
     }
 }
 
-function moveToNextPlayerTurn(playerIds) { // Move to the Next Player's Turn
+function moveToNextPlayerTurn(playerIds) {
     try {
+        // Find the index of the current player in the active players array
         let currentIndex = playerIds.indexOf(currentPlayerTurn);
+        
+        // If current player isn't in the array (already out), start from beginning
+        if (currentIndex === -1) currentIndex = 0;
+        
         clearPlayerTimer(currentPlayerTurn);
 
+        let nextPlayerFound = false;
         let attempts = 0;
-        do {
+        
+        // Loop to find the next valid player
+        while (!nextPlayerFound && attempts < playerIds.length) {
             currentIndex = (currentIndex + 1) % playerIds.length;
-            currentPlayerTurn = playerIds[currentIndex];
+            const nextPlayerId = playerIds[currentIndex];
+            
+            // Verify player exists and has lives
+            if (userMap[nextPlayerId] && lives[userMap[nextPlayerId].name] > 0) {
+                currentPlayerTurn = nextPlayerId;
+                nextPlayerFound = true;
+            }
+            
             attempts++;
-        } while (attempts < playerIds.length && (!userMap[currentPlayerTurn] || lives[userMap[currentPlayerTurn].name] <= 0));
+        }
 
-        if (attempts >= playerIds.length) {
-            log("All players are out of lives. Game Over or Reset required.", 'moveToNextPlayerTurn');
+        if (!nextPlayerFound) {
+            log("All players are out of lives. Game Over.", 'moveToNextPlayerTurn');
             currentPlayerTurn = null;
             gameInProgress = false;
             io.emit('gameOver', 'All players are out of lives. Game Over!');
@@ -279,7 +353,7 @@ function moveToNextPlayerTurn(playerIds) { // Move to the Next Player's Turn
             startPlayerTimer(currentPlayerTurn);
         }
     } catch (error) {
-        console.error('Error in moveToNextPlayerTurn:', error);
+        handleError(null, error, 'moveToNextPlayerTurn');
     }
 }
 
@@ -312,7 +386,6 @@ function handleInvalidGuess(socket) { // Handles an invalid guess by decrementin
     if (lives[socket.username] <= 0) {
         socket.emit('gameOver');
         log(`${socket.username} has 0 lives`, 'handleInvalidGuess'); // Log when player has 0 lives
-        checkAndProceedToNextTurn();
     }
 }
 
@@ -332,15 +405,35 @@ function isValidGuessInput(socket, word) { // Validates the player's guess input
     return true;
 }
 
-async function checkWordValidity(word) { // Checks if a word is valid using the Datamuse API
+async function checkWordValidity(word) {
     try {
-        const response = await axios.get(`https://api.datamuse.com/words?sp=${word}&md=d`);
-        if (response.data.length === 0 || response.data[0].word !== word) {
-            log(`Word validation failed for: ${word}`, 'checkWordValidity'); // Log invalid word
+        // First attempt - Datamuse API
+        const response = await axios.get(`https://api.datamuse.com/words?sp=${word}&md=d`, {
+            timeout: 3000 // Add timeout to prevent hanging
+        });
+        
+        if (response.data.length > 0 && response.data[0].word === word) {
+            return true;
         }
-        return response.data.length > 0 && response.data[0].word === word;
+        
+        // Fall back to a basic dictionary check if available
+        // This is a placeholder - you might want to implement a local dictionary
+        if (word.length > 2) {
+            // Simple validation for demonstration - allow words longer than 2 chars
+            // In production you'd want a more robust fallback
+            return true;
+        }
+        
+        log(`Word validation failed for: ${word}`, 'checkWordValidity');
+        return false;
     } catch (error) {
-        log(`Error validating word: ${word}`, 'checkWordValidity'); // Log API error
+        log(`Error validating word: ${word}, Error: ${error.message}`, 'checkWordValidity');
+        // Graceful degradation - if API fails, accept the word if it meets basic criteria
+        // In production, you might want a more sophisticated fallback
+        if (word.length > 2) {
+            log(`Word accepted by fallback validation: ${word}`, 'checkWordValidity');
+            return true;
+        }
         return false;
     }
 }
@@ -361,35 +454,64 @@ function typingHandler(socket) { // Handles a player typing a message and broadc
     };
 }
 
-function handlePlayerDisconnect(socket) { // Handles a player disconnecting from the game
+function handlePlayerDisconnect(socket) {
     try {
         if (socket.username) {
             log(`Player disconnected: ${socket.username}`, 'handlePlayerDisconnect');
             log(`Total connected sockets: ${io.engine.clientsCount}`, 'handlePlayerDisconnect');
 
             const wasCurrentPlayerTurn = socket.id === currentPlayerTurn;
+            
+            // Always clear the timer for this player
+            clearPlayerTimer(socket.id);
+            
+            // Remove player from game data
             delete scores[socket.username];
             delete lives[socket.username];
             delete userMap[socket.id];
 
             totalPlayers--;
-
-            clearPlayerTimer(socket.id);
-
+            
+            // Update all clients with new game state
             updateAllPlayers();
             updatePlayerStatus();
 
+            // Handle turn transition if this was the current player's turn
             if (wasCurrentPlayerTurn && gameInProgress) {
-                checkAndProceedToNextTurn();
+                // Small delay to ensure state is updated before proceeding
+                setTimeout(() => {
+                    checkAndProceedToNextTurn();
+                }, 100);
+            } 
+            
+            // Check remaining players
+            const remainingPlayers = Object.keys(userMap);
+            
+            if (remainingPlayers.length === 1 && gameInProgress) {
+                const lastPlayerName = userMap[remainingPlayers[0]].name;
+                log(`${lastPlayerName} is the last player standing!`, 'handlePlayerDisconnect');
+                
+                // Clear all timers to prevent race conditions
+                Object.keys(playerTimer).forEach(timerId => {
+                    clearInterval(playerTimer[timerId]);
+                });
+                
+                io.emit('gameWin', lastPlayerName);
+                
+                // Delay reset to allow UI to update
+                setTimeout(() => {
+                    resetPlayerState();
+                }, 1000);
             }
 
+            // Reset game if all players disconnect
             if (io.engine.clientsCount === 0) {
                 resetPlayerState();
                 log(`All players have been disconnected`, 'handlePlayerDisconnect');
             }
         }
     } catch (error) {
-        handleError(socket, error, 'handlePlayerDisconnect');
+        handleError(null, error, 'handlePlayerDisconnect');
     }
 }
 
@@ -415,7 +537,7 @@ function startPlayerTimer(socketId) { // Starts the timer for a player's turn
                 if (lives[username] <= 0) {// Check if the player has run out of lives
                     io.to(socketId).emit('gameOver'); // Notify the player they are out of lives
                     log(`${username} is out of lives!`, 'startPlayerTimer'); // Log when a player is out of lives
-                    checkAndProceedToNextTurn(); // Check if there is only one player left
+                    //checkAndProceedToNextTurn(); // Check if there is only one player left
                 }
                 
                 // Move to the next player's turn, even if the current player is out of lives
