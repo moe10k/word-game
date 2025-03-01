@@ -46,11 +46,30 @@ function initializeSocketEventHandlers() {
     socket.on('timerUpdate', updateTimerDisplay);
     socket.on('gameReset', resetFrontendUI);
     socket.on('turnEnded', clearInputAndTypingStatus);
+    
+    // Add reconnection handling
+    socket.on('disconnect', () => {
+        showMessage('Connection lost. Attempting to reconnect...');
+    });
+    
+    socket.on('connect', () => {
+        if (myUsername) {
+            showMessage('Reconnected! Attempting to rejoin game...');
+            socket.emit('setUsername', myUsername);
+        }
+    });
+    
+    socket.on('error', (errorMsg) => {
+        console.error('Socket error:', errorMsg);
+        showMessage('An error occurred. Please refresh the page if issues persist.');
+    });
+    
+    // Handle free skip button
     document.getElementById('freeSkip').addEventListener('click', function () {
         if (!hasUsedSkip) {
             socket.emit('freeSkip');
-            hasUsedSkip = true; // Mark that the player has used their skip.
-            document.getElementById('freeSkip').disabled = true; // Disable the skip button after use.
+            hasUsedSkip = true;
+            document.getElementById('freeSkip').disabled = true;
         }
     });
 }
@@ -144,10 +163,19 @@ function handleJoinGameClick() {
     elements.unreadyButton.disabled = true;  // Keep disabled initially
 }
 
+let typingTimeout;
 function handleWordGuessInput() {
     if (!isGameOver) {
         const text = elements.wordGuess.value.trim();
         socket.emit('typing', { username: myUsername, text });
+        
+        // Clear previous timeout
+        clearTimeout(typingTimeout);
+        
+        // Set a new timeout to clear typing after inactivity
+        typingTimeout = setTimeout(() => {
+            socket.emit('clearTyping');
+        }, 3000);
     }
 }
 
@@ -175,13 +203,20 @@ function handleUsernameError(message) {
 }
 
 function handleGameUpdate(data) {
-    gameInProgress = data.gameStarted;
-    if (data.gameStarted) {
-        elements.gameScreen.style.display = 'block';
-        elements.usernameScreen.style.display = 'none';
+    try {
+        gameInProgress = data.gameStarted;
+        if (data.gameStarted) {
+            elements.gameScreen.style.display = 'block';
+            elements.usernameScreen.style.display = 'none';
+        }
+        elements.letterDisplay.textContent = data.letters || '';
+        if (data.scores && data.lives) {
+            updateScoreBoard(data.scores, data.lives);
+        }
+    } catch (error) {
+        console.error('Error handling game update:', error);
+        showMessage('An error occurred updating the game state.');
     }
-    elements.letterDisplay.textContent = data.letters;
-    updateScoreBoard(data.scores, data.lives); 
 }
 
 function handleGameOver() {
@@ -192,15 +227,35 @@ function handleGameOver() {
 }
 
 function handleGameWin(winnerUsername) {
+    console.log('Game win event received for winner:', winnerUsername);
+    
+    // Disable game controls
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
+    
+    // Update modal content
     document.getElementById('winnerName').textContent = winnerUsername;
-    var modal = document.getElementById('winnerModal');
+    
+    // Show the modal
+    const modal = document.getElementById('winnerModal');
     modal.style.display = "block";
-    document.getElementById('resetGame').addEventListener('click', function() {
+    
+    // Use proper event delegation instead of recreating the button
+    document.getElementById('resetGame').onclick = function() {
+        console.log('Reset game button clicked');
         socket.emit('resetGameRequest');
+        modal.style.display = "none";
         resetFrontendUI();
-    });
+    };
+    
+    // Also allow clicking outside the modal to close it
+    window.onclick = function(event) {
+        if (event.target === modal) {
+            modal.style.display = "none";
+            socket.emit('resetGameRequest');
+            resetFrontendUI();
+        }
+    };
 }
 
 function handleTurnUpdate(currentTurnUsername) {
@@ -244,21 +299,45 @@ function showMessage(message) {
     setTimeout(() => messageBox.style.display = 'none', 3000);
 }
 
+// Make sure the modal CSS is correct
+function checkStylesOnLoad() {
+    // Ensure the modal starts hidden
+    const modal = document.getElementById('winnerModal');
+    if (modal) {
+        modal.style.display = "none";
+        console.log('Initial modal display style set to:', modal.style.display);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', checkStylesOnLoad);
+
 function resetFrontendUI() {
+    // Game state reset
     isGameOver = false;
     gameInProgress = false;
-    myUsername = null; 
+    myUsername = null;
+    hasUsedSkip = false;
+    
+    // UI elements reset
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
+    elements.wordGuess.value = '';
     elements.usernameInput.disabled = false;
     elements.usernameInput.value = ''; 
+    
+    // Button states
     elements.joinGameButton.style.display = 'inline';
     elements.readyButton.style.display = 'none';
     elements.readyButton.disabled = false;
+    elements.unreadyButton.disabled = true;
+    document.getElementById('freeSkip').disabled = true;
+    
+    // Display states
     document.getElementById('game').style.display = 'none';
     document.getElementById('winnerModal').style.display = 'none';
     document.getElementById('usernameScreen').style.display = 'block';
-    document.getElementById('wordGuess').value = '';
+    
+    // Clear all dynamic content
     document.getElementById('playerList').innerHTML = '';
     document.getElementById('scoreBoard').innerHTML = '';
     document.getElementById('playerTypingStatus').innerHTML = '';
@@ -267,8 +346,18 @@ function resetFrontendUI() {
     document.getElementById('player-statuses').innerHTML = '';
     document.getElementById('globalTypingDisplay').innerHTML = '';
     document.getElementById('timerDisplay').textContent = '';
-
+    
+    // Clear any pending timers on the client side
+    clearTimeout(window.typingTimeout);
+    
+    // Inform the user
     showMessage('Game has been reset. Please join again.');
+    
+    // Clear any remaining event listeners
+    window.onclick = null;
+    
+    // Re-initialize event listeners to ensure clean state
+    initializeEventListeners();
 }
 
 
