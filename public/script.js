@@ -12,14 +12,23 @@ const elements = {
     readyButton: document.getElementById('readyButton'),
     unreadyButton: document.getElementById('unreadyButton'),
     playerTypingStatus: document.getElementById('playerTypingStatus'),
-    playerList: document.getElementById('playerList')
+    playerList: document.getElementById('playerList'),
+    // Lobby elements
+    lobbyControls: document.getElementById('lobbyControls'),
+    createLobbyBtn: document.getElementById('createLobby'),
+    joinLobbyBtn: document.getElementById('joinLobby'),
+    lobbyCodeInput: document.getElementById('lobbyCodeInput'),
+    currentLobby: document.getElementById('currentLobby'),
+    lobbyCode: document.getElementById('lobbyCode'),
+    lobbyPlayerList: document.getElementById('lobbyPlayerList'),
+    leaveLobbyBtn: document.getElementById('leaveLobby')
 };
 
 let myUsername = null;
 let isGameOver = false;
 let gameInProgress = false;
 let hasUsedSkip = false;
-
+let currentLobbyId = null;
 
 function initializeEventListeners() {
     elements.readyButton.addEventListener('click', handleReadyClick);
@@ -28,18 +37,35 @@ function initializeEventListeners() {
     elements.wordGuess.addEventListener('input', handleWordGuessInput);
     elements.wordGuess.addEventListener('keypress', handleWordGuessKeypress);
     elements.submitGuess.addEventListener('click', handleSubmitGuessClick);
+    
+    // Lobby event listeners
+    elements.createLobbyBtn.addEventListener('click', () => {
+        socket.emit('createLobby');
+    });
+    
+    elements.joinLobbyBtn.addEventListener('click', () => {
+        const lobbyId = elements.lobbyCodeInput.value.trim().toUpperCase();
+        if (lobbyId) {
+            socket.emit('joinLobby', lobbyId);
+        } else {
+            showMessage('Please enter a lobby code');
+        }
+    });
+    
+    elements.leaveLobbyBtn.addEventListener('click', () => {
+        socket.emit('leaveLobby');
+    });
 }
 
 function initializeSocketEventHandlers() {
     socket.on('playerTyping', handlePlayerTyping);
     socket.on('usernameError', handleUsernameError);
+    socket.on('usernameSet', handleUsernameSet);
     socket.on('gameUpdate', handleGameUpdate);
-    socket.on('playerStatusUpdate', updatePlayerList);
     socket.on('gameOver', handleGameOver);
     socket.on('gameWin', handleGameWin);
     socket.on('invalidWord', showMessage);
     socket.on('notYourTurn', () => showMessage("It's not your turn!"));
-    socket.on('gameInProgress', () => showMessage('A game is currently in progress. Please wait for the next round.'));
     socket.on('actionBlocked', showMessage);
     socket.on('turnUpdate', handleTurnUpdate);
     socket.on('typingCleared', clearGlobalTypingDisplay);
@@ -71,6 +97,48 @@ function initializeSocketEventHandlers() {
             hasUsedSkip = true;
             document.getElementById('freeSkip').disabled = true;
         }
+    });
+    
+    // Lobby event handlers
+    socket.on('lobbyCreated', (lobbyId) => {
+        currentLobbyId = lobbyId;
+        elements.lobbyCode.textContent = lobbyId;
+        elements.lobbyControls.style.display = 'block';
+        elements.currentLobby.style.display = 'block';
+        elements.readyButton.style.display = 'inline';
+        elements.unreadyButton.style.display = 'inline';
+        updateLobbyControlsVisibility(true);
+        showMessage(`Lobby created with code: ${lobbyId}`);
+    });
+    
+    socket.on('lobbyJoined', (lobbyId) => {
+        currentLobbyId = lobbyId;
+        elements.lobbyCode.textContent = lobbyId;
+        elements.lobbyControls.style.display = 'block';
+        elements.currentLobby.style.display = 'block';
+        elements.readyButton.style.display = 'inline';
+        elements.unreadyButton.style.display = 'inline';
+        updateLobbyControlsVisibility(true);
+        showMessage(`Joined lobby: ${lobbyId}`);
+    });
+    
+    socket.on('lobbyUpdate', (data) => {
+        updateLobbyPlayers(data.players);
+    });
+    
+    socket.on('lobbyError', (message) => {
+        showMessage(message);
+    });
+    
+    socket.on('lobbyLeft', () => {
+        currentLobbyId = null;
+        elements.currentLobby.style.display = 'none';
+        elements.lobbyCode.textContent = '';
+        elements.lobbyPlayerList.innerHTML = '';
+        elements.readyButton.style.display = 'none';
+        elements.unreadyButton.style.display = 'none';
+        updateLobbyControlsVisibility(false);
+        showMessage('Left the lobby');
     });
 }
 
@@ -127,15 +195,15 @@ function updateScoreBoard(scores, lives) {
 
 function handleReadyClick() {
     if (!elements.readyButton.disabled) {
-        socket.emit('playerReady');
+        socket.emit('ready', true);
         elements.readyButton.disabled = true;
         elements.unreadyButton.disabled = false;
     }
 }
 
 function handleUnreadyClick() {
-    if (!elements.unreadyButton.disabled){    
-        socket.emit('playerUnready');
+    if (!elements.unreadyButton.disabled) {
+        socket.emit('ready', false);
         elements.unreadyButton.disabled = true;
         elements.readyButton.disabled = false;
     }
@@ -143,24 +211,11 @@ function handleUnreadyClick() {
 
 function handleJoinGameClick() {
     const username = elements.usernameInput.value.trim();
-    if (gameInProgress) {
-        showMessage('A game is currently in progress. Please wait for the next round.');
-        return;
-    }
     if (!username || username.length < 3 || username.length > 20) {
         showMessage('Invalid username. Must be 3-20 characters long.');
         return;
     }
-    myUsername = username;
     socket.emit('setUsername', username);
-
-    
-    elements.usernameInput.disabled = true;
-
-    elements.joinGameButton.style.display = 'none';
-    elements.readyButton.style.display = 'inline';
-    elements.unreadyButton.style.display = 'inline';
-    elements.unreadyButton.disabled = true;  // Keep disabled initially
 }
 
 let typingTimeout;
@@ -200,6 +255,14 @@ function handleUsernameError(message) {
     elements.joinGameButton.style.display = 'inline';
     elements.readyButton.style.display = 'none';
     elements.usernameInput.value = '';
+}
+
+function handleUsernameSet(username) {
+    myUsername = username;
+    elements.usernameInput.disabled = true;
+    elements.joinGameButton.style.display = 'none';
+    elements.lobbyControls.style.display = 'block';
+    showMessage('Username set successfully. Create or join a lobby to play!');
 }
 
 function handleGameUpdate(data) {
@@ -312,54 +375,54 @@ function checkStylesOnLoad() {
 document.addEventListener('DOMContentLoaded', checkStylesOnLoad);
 
 function resetFrontendUI() {
-    // Game state reset
-    isGameOver = false;
-    gameInProgress = false;
-    myUsername = null;
-    hasUsedSkip = false;
-    
-    // UI elements reset
-    elements.wordGuess.disabled = true;
-    elements.submitGuess.disabled = true;
-    elements.wordGuess.value = '';
-    elements.usernameInput.disabled = false;
-    elements.usernameInput.value = ''; 
-    
-    // Button states
-    elements.joinGameButton.style.display = 'inline';
-    elements.readyButton.style.display = 'none';
+    elements.gameScreen.style.display = 'none';
+    elements.usernameScreen.style.display = 'block';
+    elements.wordGuess.disabled = false;
+    elements.submitGuess.disabled = false;
     elements.readyButton.disabled = false;
     elements.unreadyButton.disabled = true;
-    document.getElementById('freeSkip').disabled = true;
-    
-    // Display states
-    document.getElementById('game').style.display = 'none';
-    document.getElementById('winnerModal').style.display = 'none';
-    document.getElementById('usernameScreen').style.display = 'block';
-    
-    // Clear all dynamic content
-    document.getElementById('playerList').innerHTML = '';
-    document.getElementById('scoreBoard').innerHTML = '';
-    document.getElementById('playerTypingStatus').innerHTML = '';
-    document.getElementById('livesDisplay').innerHTML = '';
+    elements.wordGuess.value = '';
+    document.getElementById('currentTurn').textContent = '';
     document.getElementById('letterDisplay').textContent = '';
-    document.getElementById('player-statuses').innerHTML = '';
-    document.getElementById('globalTypingDisplay').innerHTML = '';
+    document.getElementById('scoreBoard').innerHTML = '';
+    document.getElementById('playerList').innerHTML = '';
+    document.getElementById('globalTypingDisplay').textContent = '';
     document.getElementById('timerDisplay').textContent = '';
+    isGameOver = false;
+    gameInProgress = false;
+    hasUsedSkip = false;
     
-    // Clear any pending timers on the client side
-    clearTimeout(window.typingTimeout);
-    
-    // Inform the user
-    showMessage('Game has been reset. Please join again.');
-    
-    // Clear any remaining event listeners
-    window.onclick = null;
-    
-    // Re-initialize event listeners to ensure clean state
-    initializeEventListeners();
+    // Reset lobby UI
+    if (!currentLobbyId) {
+        elements.currentLobby.style.display = 'none';
+        elements.lobbyCode.textContent = '';
+        elements.lobbyPlayerList.innerHTML = '';
+        updateLobbyControlsVisibility(false);
+    } else {
+        updateLobbyControlsVisibility(true);
+    }
 }
 
+function updateLobbyPlayers(players) {
+    elements.lobbyPlayerList.innerHTML = '';
+    players.forEach(player => {
+        const playerElement = document.createElement('div');
+        playerElement.textContent = `${player.name} - ${player.ready ? 'Ready' : 'Not Ready'}`;
+        playerElement.classList.add(player.ready ? 'player-ready' : 'player-not-ready');
+        elements.lobbyPlayerList.appendChild(playerElement);
+    });
+}
 
-initializeEventListeners();
-initializeSocketEventHandlers();
+// Add this function to update lobby controls
+function updateLobbyControlsVisibility(inLobby) {
+    elements.createLobbyBtn.disabled = inLobby;
+    elements.joinLobbyBtn.disabled = inLobby;
+    elements.lobbyCodeInput.disabled = inLobby;
+}
+
+// Initialize everything when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    initializeEventListeners();
+    initializeSocketEventHandlers();
+    checkStylesOnLoad();
+});

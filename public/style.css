@@ -388,3 +388,125 @@ button:hover {
     
     /* Additional styling as needed (e.g., font size, color) */
 }
+
+/* Lobby Styles */
+#lobbyControls {
+    margin: 20px 0;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.lobby-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.join-lobby-container {
+    display: flex;
+    gap: 10px;
+}
+
+#lobbyCodeInput {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.9);
+    text-transform: uppercase;
+}
+
+#currentLobby {
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    margin-top: 20px;
+}
+
+#lobbyCode {
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+}
+
+#lobbyPlayerList {
+    margin: 15px 0;
+}
+
+#lobbyPlayerList div {
+    padding: 8px;
+    margin: 5px 0;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#createLobby,
+#joinLobby,
+#leaveLobby {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+#createLobby {
+    background: #4CAF50;
+    color: white;
+}
+
+#createLobby:hover {
+    background: #45a049;
+}
+
+#joinLobby {
+    background: #2196F3;
+    color: white;
+}
+
+#joinLobby:hover {
+    background: #1e88e5;
+}
+
+#leaveLobby {
+    background: #f44336;
+    color: white;
+    margin-top: 15px;
+}
+
+#leaveLobby:hover {
+    background: #e53935;
+}
+
+.lobby-ready-controls {
+    margin: 15px 0;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+#readyButton {
+    background: #4CAF50;
+    color: white;
+}
+
+#readyButton:hover {
+    background: #45a049;
+}
+
+#unreadyButton {
+    background: #f44336;
+    color: white;
+}
+
+#unreadyButton:hover {
+    background: #e53935;
+}
+
+#readyButton:disabled,
+#unreadyButton:disabled {
+    background: #cccccc;
+    cursor: not-allowed;
+}

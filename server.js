@@ -23,7 +23,96 @@ let currentPlayerTurn = null;
 let gameInProgress = false;
 let playerTimer = {};
 
+// Lobby System
+let lobbies = {};  // { lobbyId: { players: {}, gameState: {}, inProgress: false } }
+let playerLobbies = {};  // { socketId: lobbyId }
 
+function createLobby(socket) {
+    const lobbyId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    lobbies[lobbyId] = {
+        players: {},
+        gameState: {
+            scores: {},
+            lives: {},
+            currentLetters: generateRandomLetters(),
+            currentPlayerTurn: null,
+            readyPlayers: 0
+        },
+        inProgress: false
+    };
+    joinLobby(socket, lobbyId);
+    return lobbyId;
+}
+
+function joinLobby(socket, lobbyId) {
+    if (!lobbies[lobbyId]) {
+        socket.emit('lobbyError', 'Lobby does not exist');
+        return false;
+    }
+    if (lobbies[lobbyId].inProgress) {
+        socket.emit('lobbyError', 'Game already in progress');
+        return false;
+    }
+    
+    // Check for duplicate names in the target lobby
+    const isDuplicateName = Object.values(lobbies[lobbyId].players)
+        .some(player => player.name === socket.username);
+    if (isDuplicateName) {
+        socket.emit('lobbyError', 'Username already exists in this lobby');
+        return false;
+    }
+    
+    // Remove player from previous lobby if any
+    if (playerLobbies[socket.id]) {
+        leaveLobby(socket);
+    }
+    
+    playerLobbies[socket.id] = lobbyId;
+    lobbies[lobbyId].players[socket.id] = { name: socket.username, ready: false };
+    
+    // Immediately send current lobby state to the new player
+    const playerStatus = Object.entries(lobbies[lobbyId].players).map(([_, player]) => ({
+        name: player.name,
+        ready: player.ready
+    }));
+    socket.emit('lobbyUpdate', {
+        lobbyId,
+        players: playerStatus
+    });
+    
+    // Then notify all players in the lobby about the new player
+    updateLobbyPlayers(lobbyId);
+    return true;
+}
+
+function leaveLobby(socket) {
+    const lobbyId = playerLobbies[socket.id];
+    if (lobbyId && lobbies[lobbyId]) {
+        delete lobbies[lobbyId].players[socket.id];
+        delete playerLobbies[socket.id];
+        
+        // If lobby is empty, delete it
+        if (Object.keys(lobbies[lobbyId].players).length === 0) {
+            delete lobbies[lobbyId];
+        } else {
+            updateLobbyPlayers(lobbyId);
+        }
+    }
+}
+
+function updateLobbyPlayers(lobbyId) {
+    if (!lobbies[lobbyId]) return;
+    
+    const playerStatus = Object.entries(lobbies[lobbyId].players).map(([socketId, player]) => ({
+        name: player.name,
+        ready: player.ready
+    }));
+    
+    io.to(lobbyId).emit('lobbyUpdate', {
+        lobbyId,
+        players: playerStatus
+    });
+}
 
 // Helper Functions
 function generateRandomLetters() { // Generates two random letters for the current round of the game
@@ -72,87 +161,93 @@ function log(message, context = '') { // Logs a message to the console with a ti
 
 
 // Socket Event Handlers
-function setUsernameHandler(socket) { // Handles setting the username for a player and validates the input
+function setUsernameHandler(socket) {
     return function(username) {
         try {
-            if (gameInProgress) {
-                socket.emit('gameInProgress');
-                return;
-            }
             if (!username || typeof username !== 'string' || username.length < 3 || username.length > 20) {
                 socket.emit('usernameError', 'Invalid username. Must be 3-20 characters long.');
                 return;
             }
-            if (Object.values(userMap).some(user => user.name === username)) {
-                socket.emit('usernameError', 'Username already taken');
-                return;
+            
+            // Check if username is taken in any lobby
+            for (const lobbyId in lobbies) {
+                if (Object.values(lobbies[lobbyId].players).some(player => player.name === username)) {
+                    socket.emit('usernameError', 'Username already taken');
+                    return;
+                }
             }
+            
             socket.username = username;
-            lives[username] = 3;
-            userMap[socket.id] = { name: username, ready: false };
-            updatePlayerStatus();
-            log(`Username set and joined for ${socket.id}: ${username}`, 'setUsernameHandler');
-            logAllPlayers();
+            socket.emit('usernameSet', username);
+            log(`Username set for ${socket.id}: ${username}`, 'setUsernameHandler');
         } catch (error) {
             handleError(socket, error, 'setUsernameHandler');
         }
     };
 }
 
-function guessHandler(socket) { // Handles a player's guess and validates the input
+function guessHandler(socket) {
     return async function (word) {
         try {
-            if (!canPlayerGuess(socket)) return; // New helper function to check if the player can guess
+            if (!canPlayerGuess(socket)) return;
 
-            log(`${socket.username} guessed: ${word}`, 'guessHandler');
+            const lobbyId = playerLobbies[socket.id];
+            if (!lobbyId) return;
 
-            const isValid = await handleGuessValidation(socket, word); // New function to handle guess validation
-
+            const isValid = await handleGuessValidation(socket, word);
             clearPlayerTimer(socket.id);
-            if (!isValid) { // Handle invalid guesses
+
+            if (!isValid) {
                 handleInvalidGuess(socket);
-            } else { // Process valid guesses
+            } else {
                 handleValidGuess(socket, word);
             }
 
-            checkAndProceedToNextTurn(); // Move to the next turn
-            updateAllPlayers(); // Update all players with the new game state
-
+            checkAndProceedToNextTurn(lobbyId);
         } catch (error) {
             handleError(socket, error, 'guessHandler');
         }
     };
 }
 
-function canPlayerGuess(socket) { // Check if the player can guess
-    if (!gameInProgress) { // Check if the game is in progress
+function canPlayerGuess(socket) {
+    const lobbyId = playerLobbies[socket.id];
+    const lobby = lobbies[lobbyId];
+    
+    if (!lobby || !lobby.inProgress) {
         socket.emit('actionBlocked', 'The game is not in progress.');
         return false;
     }
 
-    if (!isPlayersTurn(socket) || !hasPlayerLives(socket)) { // Check if it is the player's turn and they have lives
+    if (socket.id !== lobby.gameState.currentPlayerTurn) {
+        socket.emit('actionBlocked', 'Wait for your turn.');
+        return false;
+    }
+
+    const playerLives = lobby.gameState.lives[socket.username];
+    if (!playerLives || playerLives <= 0) {
+        socket.emit('actionBlocked', 'You have no lives remaining.');
         return false;
     }
 
     return true;
 }
 
-async function handleGuessValidation(socket, word) { // Validate the player's guess
+async function handleGuessValidation(socket, word) {
+    const lobbyId = playerLobbies[socket.id];
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return false;
+
     if (!isValidGuessInput(socket, word)) {
         return false;
     }
 
     const isValidWord = await checkWordValidity(word);
-    if (isValidWord && isValidGuess(word, currentLetters)) {
-        log(`${socket.username} guessed correctly`, 'handleGuessValidation');
+    if (isValidWord && isValidGuess(word, lobby.gameState.currentLetters)) {
         return true;
-    } else {
-        log(`${socket.username} guessed incorrectly`, 'handleGuessValidation');
-        return false;
     }
+    return false;
 }
-
-
 
 function updatePlayerStatus() { // Updates all connected players with the current player status (ready or not)
     const playerStatus = Object.values(userMap).map(({ name, ready }) => ({
@@ -164,53 +259,77 @@ function updatePlayerStatus() { // Updates all connected players with the curren
 
 function setPlayerReady(socket, isReady) {
     try {
-        if (gameInProgress) {
+        const lobbyId = playerLobbies[socket.id];
+        if (!lobbyId || !lobbies[lobbyId]) {
+            socket.emit('actionBlocked', 'You must be in a lobby to ready up.');
+            return;
+        }
+        
+        if (lobbies[lobbyId].inProgress) {
             socket.emit('actionBlocked', 'Game in progress. Wait for the next round.');
             return;
         }
+        
         log(`${socket.username} is ${isReady ? 'Ready' : 'Unready'}!`, 'setPlayerReady');
-        readyPlayers += isReady ? 1 : -1;
-        if (userMap[socket.id]) {
-            userMap[socket.id].ready = isReady;
-            scores[socket.username] = scores[socket.username] || 0;
-            updatePlayerStatus();
-            checkAllPlayersReady();
-        }
+        lobbies[lobbyId].players[socket.id].ready = isReady;
+        
+        // Update lobby state
+        updateLobbyPlayers(lobbyId);
+        
+        // Check if all players are ready to start the game
+        checkLobbyPlayersReady(lobbyId);
     } catch (error) {
         handleError(socket, error, 'setPlayerReady');
     }
 }
 
-function checkAllPlayersReady() { // Checks if all players are ready and starts the game if they are
-    const allReady = Object.values(userMap).every(user => user.ready);
-    if (allReady && Object.keys(userMap).length > 1) {
-        gameInProgress = true;
-        log(`Game has Started...`, 'checkAllPlayersReady'); // Log the game start
-        currentLetters = generateRandomLetters();
-        log(`Current Letters for start of game: ${currentLetters}`, 'checkAllPlayersReady'); // Log the currentletters for start of game
-        io.emit('gameUpdate', {
-            letters: currentLetters,
-            scores: scores,
-            lives: lives,
+function checkLobbyPlayersReady(lobbyId) {
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return;
+    
+    const players = Object.values(lobby.players);
+    const allReady = players.length > 1 && players.every(player => player.ready);
+    
+    if (allReady) {
+        lobby.inProgress = true;
+        lobby.gameState.currentLetters = generateRandomLetters();
+        
+        // Initialize game state for the lobby
+        const playerIds = Object.keys(lobby.players);
+        lobby.gameState.currentPlayerTurn = playerIds[Math.floor(Math.random() * playerIds.length)];
+        
+        // Initialize scores and lives for all players in the lobby
+        playerIds.forEach(playerId => {
+            const playerName = lobby.players[playerId].name;
+            lobby.gameState.scores[playerName] = 0;
+            lobby.gameState.lives[playerName] = 3;
+        });
+        
+        // Notify all players in the lobby that the game has started
+        io.to(lobbyId).emit('gameUpdate', {
+            letters: lobby.gameState.currentLetters,
+            scores: lobby.gameState.scores,
+            lives: lobby.gameState.lives,
             gameStarted: true
         });
-        const playerIds = Object.keys(userMap);
-        currentPlayerTurn = playerIds[Math.floor(Math.random() * playerIds.length)];
-        emitCurrentTurn();
-        Object.values(userMap).forEach(user => user.ready = false);
-        updatePlayerStatus();
-        startPlayerTimer(currentPlayerTurn);
+        
+        // Reset ready status
+        Object.values(lobby.players).forEach(player => player.ready = false);
+        updateLobbyPlayers(lobbyId);
+        
+        // Start the first turn
+        emitLobbyCurrentTurn(lobbyId);
+        startPlayerTimer(lobby.gameState.currentPlayerTurn, lobbyId);
     }
 }
 
-function emitCurrentTurn() { // Emits the current player's turn to all connected players
-    try {
-        const currentUsername = userMap[currentPlayerTurn]?.name || 'Unknown';
-        io.emit('turnUpdate', currentUsername);
-        log(`Current player's turn: ${currentUsername}`, 'emitCurrentTurn'); // Log the current player's turn
-    } catch (error) {
-        console.error('Error in emitCurrentTurn:', error);
-    }
+function emitLobbyCurrentTurn(lobbyId) {
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return;
+    
+    const currentUsername = lobby.players[lobby.gameState.currentPlayerTurn]?.name || 'Unknown';
+    io.to(lobbyId).emit('turnUpdate', currentUsername);
+    log(`Current player's turn in lobby ${lobbyId}: ${currentUsername}`, 'emitLobbyCurrentTurn');
 }
 
 function resetPlayerState() { // Resets the game state for all players and notifies them to reset their UI
@@ -240,80 +359,37 @@ function resetPlayerState() { // Resets the game state for all players and notif
     }
 }
 
-function checkAndProceedToNextTurn() {
-    try {
-        // First clear any existing timer to prevent race conditions
-        if (currentPlayerTurn) {
-            clearPlayerTimer(currentPlayerTurn);
-        }
-        
-        // Clean up any disconnected players or players with no lives
-        const playersToRemove = [];
-        
-        Object.keys(userMap).forEach(socketId => {
-            const username = userMap[socketId].name;
-            if (!username || !lives[username] || lives[username] <= 0) {
-                log(`Player ${username || socketId} has no more lives or is invalid`, 'checkAndProceedToNextTurn');
-                playersToRemove.push(socketId);
-            }
-        });
-        
-        // Remove players who are out of the game
-        playersToRemove.forEach(socketId => {
-            // Don't delete game data here, just handle turn logic
-            if (socketId === currentPlayerTurn) {
-                currentPlayerTurn = null; // Clear current turn if it was this player's turn
-            }
-        });
+function checkAndProceedToNextTurn(lobbyId) {
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return;
 
-        // Find all players with lives remaining
-        const playersWithLives = Object.keys(userMap).filter(socketId => {
-            const username = userMap[socketId]?.name;
-            return username && lives[username] && lives[username] > 0;
-        });
-
-        log(`Players with lives remaining: ${playersWithLives.length}`, 'checkAndProceedToNextTurn');
-        
-        // Handle game end conditions
-        if (playersWithLives.length === 1) {
-            const winningSocketId = playersWithLives[0];
-            const winningPlayerName = userMap[winningSocketId].name;
-            
-            log(`${winningPlayerName} wins the game!`, 'checkAndProceedToNextTurn');
-            
-            // Ensure all timers are cleared
-            Object.keys(playerTimer).forEach(timerId => {
-                clearInterval(playerTimer[timerId]);
-            });
-            
-            // Emit the win event before resetting the state
-            io.emit('gameWin', winningPlayerName);
-            
-            // Add a delay before resetting the game state
-            setTimeout(() => {
-                resetPlayerState();
-            }, 1000);
-            
-            return; // Don't proceed to next turn after a win
-        } else if (playersWithLives.length === 0) {
-            // Handle the case where everyone is out
-            log(`No players with lives remaining. Game Over!`, 'checkAndProceedToNextTurn');
-            io.emit('gameOver', 'All players are out of lives. Game Over!');
-            resetPlayerState();
-            return;
-        }
-        
-        // Continue the game with the remaining players
-        moveToNextPlayerTurn(playersWithLives);
-    } catch (error) {
-        console.error('Error in checkAndProceedToNextTurn:', error);
-        // Recovery: try to maintain game state or reset if severe error
-        if (gameInProgress && Object.keys(userMap).length > 0) {
-            moveToNextPlayerTurn(Object.keys(userMap));
-        } else {
-            resetPlayerState();
-        }
+    // Clear any existing timer
+    if (lobby.gameState.currentPlayerTurn) {
+        clearPlayerTimer(lobby.gameState.currentPlayerTurn);
     }
+
+    // Get players with lives
+    const playersWithLives = Object.entries(lobby.players)
+        .filter(([_, player]) => lobby.gameState.lives[player.name] > 0)
+        .map(([id]) => id);
+
+    if (playersWithLives.length <= 1) {
+        if (playersWithLives.length === 1) {
+            const winnerName = lobby.players[playersWithLives[0]].name;
+            io.to(lobbyId).emit('gameWin', winnerName);
+        }
+        resetLobby(lobbyId);
+        return;
+    }
+
+    // Find next player
+    const currentIndex = playersWithLives.indexOf(lobby.gameState.currentPlayerTurn);
+    const nextIndex = (currentIndex + 1) % playersWithLives.length;
+    lobby.gameState.currentPlayerTurn = playersWithLives[nextIndex];
+
+    // Start timer for next player
+    emitLobbyCurrentTurn(lobbyId);
+    startPlayerTimer(lobby.gameState.currentPlayerTurn, lobbyId);
 }
 
 function moveToNextPlayerTurn(playerIds) {
@@ -377,24 +453,44 @@ function hasPlayerLives(socket) { // Checks if the player has any lives remainin
     return true;
 }
 
-function handleInvalidGuess(socket) { // Handles an invalid guess by decrementing the player's lives and updating the game state
+function handleInvalidGuess(socket) {
+    const lobbyId = playerLobbies[socket.id];
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return;
+
+    const gameState = lobby.gameState;
     socket.emit('invalidWord', 'The word is not valid');
-    lives[socket.username] = (lives[socket.username] || 0) - 1;
-    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleInvalidGuess'); // Log lives remaining
-    log(`Current Letters: ${currentLetters}`, 'handleInvalidGuess'); // Log the same current letters
-    updateAllPlayers();
-    if (lives[socket.username] <= 0) {
+    gameState.lives[socket.username] = (gameState.lives[socket.username] || 1) - 1;
+    
+    // Update all players in the lobby
+    io.to(lobbyId).emit('gameUpdate', {
+        letters: gameState.currentLetters,
+        scores: gameState.scores,
+        lives: gameState.lives,
+        gameStarted: true
+    });
+
+    if (gameState.lives[socket.username] <= 0) {
         socket.emit('gameOver');
-        log(`${socket.username} has 0 lives`, 'handleInvalidGuess'); // Log when player has 0 lives
     }
 }
 
-function handleValidGuess(socket, word) { // Processes a valid guess by updating the game state and notifying all players
-    scores[socket.username] = (scores[socket.username] || 0) + 1;
-    log(`${socket.username} now has ${lives[socket.username]} lives left`, 'handleValidGuess'); // Log lives remaining
-    currentLetters = generateRandomLetters(); // New letter for when a player guesses correctly
-    log(`Current Letters: ${currentLetters}`, 'handleValidGuess'); // Log the new current letters
-    updateAllPlayers();
+function handleValidGuess(socket, word) {
+    const lobbyId = playerLobbies[socket.id];
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return;
+
+    const gameState = lobby.gameState;
+    gameState.scores[socket.username] = (gameState.scores[socket.username] || 0) + 1;
+    gameState.currentLetters = generateRandomLetters();
+    
+    // Update all players in the lobby
+    io.to(lobbyId).emit('gameUpdate', {
+        letters: gameState.currentLetters,
+        scores: gameState.scores,
+        lives: gameState.lives,
+        gameStarted: true
+    });
 }
 
 function isValidGuessInput(socket, word) { // Validates the player's guess input
@@ -456,98 +552,96 @@ function typingHandler(socket) { // Handles a player typing a message and broadc
 
 function handlePlayerDisconnect(socket) {
     try {
+        const lobbyId = playerLobbies[socket.id];
+        if (!lobbyId || !lobbies[lobbyId]) return;
+
+        const lobby = lobbies[lobbyId];
+        const wasCurrentPlayerTurn = socket.id === lobby.gameState.currentPlayerTurn;
+        
+        // Clear the timer for this player
+        clearPlayerTimer(socket.id);
+        
+        // Remove player from game state
         if (socket.username) {
-            log(`Player disconnected: ${socket.username}`, 'handlePlayerDisconnect');
-            log(`Total connected sockets: ${io.engine.clientsCount}`, 'handlePlayerDisconnect');
-
-            const wasCurrentPlayerTurn = socket.id === currentPlayerTurn;
-            
-            // Always clear the timer for this player
-            clearPlayerTimer(socket.id);
-            
-            // Remove player from game data
-            delete scores[socket.username];
-            delete lives[socket.username];
-            delete userMap[socket.id];
-
-            totalPlayers--;
-            
-            // Update all clients with new game state
-            updateAllPlayers();
-            updatePlayerStatus();
-
-            // Handle turn transition if this was the current player's turn
-            if (wasCurrentPlayerTurn && gameInProgress) {
-                // Small delay to ensure state is updated before proceeding
-                setTimeout(() => {
-                    checkAndProceedToNextTurn();
-                }, 100);
-            } 
-            
-            // Check remaining players
-            const remainingPlayers = Object.keys(userMap);
-            
-            if (remainingPlayers.length === 1 && gameInProgress) {
-                const lastPlayerName = userMap[remainingPlayers[0]].name;
-                log(`${lastPlayerName} is the last player standing!`, 'handlePlayerDisconnect');
-                
-                // Clear all timers to prevent race conditions
-                Object.keys(playerTimer).forEach(timerId => {
-                    clearInterval(playerTimer[timerId]);
-                });
-                
-                io.emit('gameWin', lastPlayerName);
-                
-                // Delay reset to allow UI to update
-                setTimeout(() => {
-                    resetPlayerState();
-                }, 1000);
-            }
-
-            // Reset game if all players disconnect
-            if (io.engine.clientsCount === 0) {
-                resetPlayerState();
-                log(`All players have been disconnected`, 'handlePlayerDisconnect');
-            }
+            delete lobby.gameState.scores[socket.username];
+            delete lobby.gameState.lives[socket.username];
         }
+        
+        // Remove player from lobby
+        delete lobby.players[socket.id];
+        delete playerLobbies[socket.id];
+
+        // Immediately update all remaining players with new game state
+        if (lobby.inProgress) {
+            io.to(lobbyId).emit('gameUpdate', {
+                letters: lobby.gameState.currentLetters,
+                scores: lobby.gameState.scores,
+                lives: lobby.gameState.lives,
+                gameStarted: true
+            });
+        }
+        
+        // Update lobby player list
+        updateLobbyPlayers(lobbyId);
+
+        // Handle turn transition if this was the current player's turn
+        if (wasCurrentPlayerTurn && lobby.inProgress) {
+            checkAndProceedToNextTurn(lobbyId);
+        }
+        
+        // Check if only one player remains
+        const remainingPlayers = Object.keys(lobby.players);
+        if (remainingPlayers.length === 1 && lobby.inProgress) {
+            const lastPlayer = lobby.players[remainingPlayers[0]];
+            io.to(lobbyId).emit('gameWin', lastPlayer.name);
+            resetLobby(lobbyId);
+        }
+        
+        // Delete lobby if empty
+        if (remainingPlayers.length === 0) {
+            delete lobbies[lobbyId];
+        }
+
+        log(`Player ${socket.username || socket.id} disconnected from lobby ${lobbyId}`, 'handlePlayerDisconnect');
     } catch (error) {
         handleError(null, error, 'handlePlayerDisconnect');
     }
 }
 
-function startPlayerTimer(socketId) { // Starts the timer for a player's turn
-    clearInterval(playerTimer[socketId]); // Clear any existing timer
-    let remainingTime = 10; // Set the timer duration
+function startPlayerTimer(socketId, lobbyId) {
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return;
+
+    clearInterval(playerTimer[socketId]);
+    let remainingTime = 10;
 
     playerTimer[socketId] = setInterval(() => {
         if (remainingTime > 0) {
             remainingTime--;
-            io.emit('timerUpdate', remainingTime); // Broadcast the remaining time to all players
+            io.to(lobbyId).emit('timerUpdate', remainingTime);
         } else {
-            clearInterval(playerTimer[socketId]); // Clear the timer when time runs out
-            const username = userMap[socketId]?.name;
+            clearInterval(playerTimer[socketId]);
+            const username = lobby.players[socketId]?.name;
             if (username) {
+                lobby.gameState.lives[username]--;
                 
-                lives[username] = (lives[username] || 1) - 1; // Deduct a life if the player runs out of time
-                log(`Timer ran out for ${username}`, 'startPlayerTimer'); // Log when the timer runs out for the player
-                log(`${username} now has ${lives[username]} lives left`, 'startPlayerTimer'); // Log lives remaining
-                log(`Current Letters: ${currentLetters}`, 'startPlayerTimer'); // Log the same current letters
-                updateAllPlayers(); // Update all players with the new game state
+                io.to(lobbyId).emit('gameUpdate', {
+                    letters: lobby.gameState.currentLetters,
+                    scores: lobby.gameState.scores,
+                    lives: lobby.gameState.lives,
+                    gameStarted: true
+                });
 
-                if (lives[username] <= 0) {// Check if the player has run out of lives
-                    io.to(socketId).emit('gameOver'); // Notify the player they are out of lives
-                    log(`${username} is out of lives!`, 'startPlayerTimer'); // Log when a player is out of lives
-                    //checkAndProceedToNextTurn(); // Check if there is only one player left
+                if (lobby.gameState.lives[username] <= 0) {
+                    io.to(socketId).emit('gameOver');
                 }
-                
-                // Move to the next player's turn, even if the current player is out of lives
-                checkAndProceedToNextTurn();
             }
-            io.emit('timerUpdate', null); // Clear the timer display on the client side
+            
+            checkAndProceedToNextTurn(lobbyId);
+            io.to(lobbyId).emit('timerUpdate', null);
         }
-    }, 1000); // Run the timer every second
+    }, 1000);
 }
-
 
 function clearPlayerTimer(socketId) { // Clears the timer for a player's turn
     clearInterval(playerTimer[socketId]);
@@ -557,44 +651,98 @@ function clearPlayerTimer(socketId) { // Clears the timer for a player's turn
 
 function handleFreeSkip(socket) {
     try {
-        if (socket.id !== currentPlayerTurn) {
+        const lobbyId = playerLobbies[socket.id];
+        const lobby = lobbies[lobbyId];
+        if (!lobby || socket.id !== lobby.gameState.currentPlayerTurn) {
             socket.emit('actionBlocked', 'You can only skip on your turn.');
             return;
         }
 
-        if (hasPlayerLives(socket)) {
-            log(`${socket.username} used their free skip.`, 'handleFreeSkip');
-            currentLetters = generateRandomLetters(); // Change the letters for the game
-            log(`New Letters: ${currentLetters}`, 'handleFreeSkip'); // Log the new letters
-            updateAllPlayers(); // Update all players with the new letters and state
-            checkAndProceedToNextTurn(); // Move to the next player's turn
-        }
+        lobby.gameState.currentLetters = generateRandomLetters();
+        io.to(lobbyId).emit('gameUpdate', {
+            letters: lobby.gameState.currentLetters,
+            scores: lobby.gameState.scores,
+            lives: lobby.gameState.lives,
+            gameStarted: true
+        });
+        
+        checkAndProceedToNextTurn(lobbyId);
     } catch (error) {
         handleError(socket, error, 'handleFreeSkip');
     }
 }
 
+function resetLobby(lobbyId) {
+    const lobby = lobbies[lobbyId];
+    if (!lobby) return;
 
-// Socket Connection Handling
-io.on('connection', socket => {
-    try {
-        log(`New player connected: ${socket.id}`, 'connection'); // Log the new player connection
-        log(`Total connected sockets: ${io.engine.clientsCount}`, 'connection'); // Log the total connected players
-        totalPlayers++;
-        socket.on('setUsername', setUsernameHandler(socket));
-        socket.on('guess', guessHandler(socket));
-        socket.on('typing', typingHandler(socket));
-        socket.on('resetGameRequest', () => {
-            resetPlayerState(socket.id);
-        });
-        socket.on('clearTyping', () => socket.broadcast.emit('typingCleared'));
-        socket.on('disconnect', () => handlePlayerDisconnect(socket));
-        socket.on('playerReady', () => setPlayerReady(socket, true));
-        socket.on('playerUnready', () => setPlayerReady(socket, false));
-        socket.on('freeSkip', () => handleFreeSkip(socket));
-    } catch (error) {
-        console.error('Error during socket connection:', error);
-    }
+    lobby.inProgress = false;
+    lobby.gameState = {
+        scores: {},
+        lives: {},
+        currentLetters: generateRandomLetters(),
+        currentPlayerTurn: null,
+        readyPlayers: 0
+    };
+
+    // Clear all timers for the lobby
+    Object.keys(lobby.players).forEach(playerId => {
+        clearInterval(playerTimer[playerId]);
+    });
+
+    // Reset ready status
+    Object.values(lobby.players).forEach(player => player.ready = false);
+    
+    // Update clients
+    io.to(lobbyId).emit('gameReset');
+    updateLobbyPlayers(lobbyId);
+}
+
+// Socket Connection
+io.on('connection', (socket) => {
+    log(`New connection: ${socket.id}`, 'socketConnection');
+    
+    socket.on('setUsername', setUsernameHandler(socket));
+    socket.on('guess', guessHandler(socket));
+    socket.on('ready', (isReady) => setPlayerReady(socket, isReady));
+    socket.on('typing', typingHandler(socket));
+    socket.on('freeSkip', () => handleFreeSkip(socket));
+    
+    // Lobby System Events
+    socket.on('createLobby', () => {
+        if (!socket.username) {
+            socket.emit('lobbyError', 'Please set a username first');
+            return;
+        }
+        const lobbyId = createLobby(socket);
+        socket.join(lobbyId);
+        socket.emit('lobbyCreated', lobbyId);
+    });
+    
+    socket.on('joinLobby', (lobbyId) => {
+        if (!socket.username) {
+            socket.emit('lobbyError', 'Please set a username first');
+            return;
+        }
+        if (joinLobby(socket, lobbyId)) {
+            socket.join(lobbyId);
+            socket.emit('lobbyJoined', lobbyId);
+        }
+    });
+    
+    socket.on('leaveLobby', () => {
+        const lobbyId = playerLobbies[socket.id];
+        if (lobbyId) {
+            socket.leave(lobbyId);
+            leaveLobby(socket);
+            socket.emit('lobbyLeft');
+        }
+    });
+    
+    socket.on('disconnect', () => {
+        leaveLobby(socket);
+        handlePlayerDisconnect(socket);
+    });
 });
 
 // Server Initialization
