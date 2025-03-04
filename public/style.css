@@ -241,15 +241,17 @@ button:hover {
 }
 
 .player-ready {
-    color: rgb(13, 142, 13);
+    color: #4CAF50;
+    font-weight: bold;
     font-size: 20px;
-    text-shadow: 1px 1px 2px #000000b5;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .player-not-ready {
-    color: rgb(197, 18, 18);
+    color: #f44336;
+    font-weight: bold;
     font-size: 20px;
-    text-shadow: 1px 1px 2px #000000b5;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .player-score {
@@ -274,11 +276,18 @@ button:hover {
 
 /*  turns  */
 #currentTurnDisplay {
-    font-size: 1.2em;
+    font-size: 1.5em;
+    margin: 20px 0;
+    padding: 10px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
     color: white;
-    text-shadow: 1px 1px 2px #000;
-    margin-bottom: 10px;
-    /* Add any other styles you like for positioning, color, etc. */
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#currentTurn {
+    font-weight: bold;
+    color: #ffd700;
 }
 
 #letters {
@@ -387,4 +396,336 @@ button:hover {
     right: 0; /* Align to the right */
     
     /* Additional styling as needed (e.g., font size, color) */
+}
+
+/* Lobby Styles */
+#lobbyControls {
+    max-width: 400px;
+    margin: 40px auto;
+    padding: 30px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+.lobby-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 25px;
+}
+
+.join-lobby-container {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 10px;
+}
+
+#lobbyCodeInput {
+    padding: 12px 15px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    text-transform: uppercase;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    order: 2;
+}
+
+#joinLobby {
+    order: 1;
+}
+
+#createLobby,
+#leaveLobby {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+#createLobby {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+    width: 100%;
+}
+
+#createLobby:hover {
+    background: linear-gradient(135deg, #45a049, #3d8b40);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+}
+
+#leaveLobby {
+    background: linear-gradient(135deg, #f44336, #e53935);
+    color: white;
+    margin-top: 20px;
+}
+
+#leaveLobby:hover {
+    background: linear-gradient(135deg, #e53935, #d32f2f);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(244, 67, 54, 0.3);
+}
+
+/* Current Lobby Styles */
+#currentLobby {
+    margin-top: 30px;
+    padding: 25px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+}
+
+#lobbyCode {
+    font-size: 32px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    letter-spacing: 2px;
+}
+
+#lobbyPlayerList {
+    margin: 20px 0;
+}
+
+#lobbyPlayerList div {
+    padding: 12px;
+    margin: 8px 0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+#lobbyPlayerList div:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateX(5px);
+}
+
+/* Player Ready States */
+#lobbyPlayerList div.player-ready {
+    color: #4CAF50;
+    font-weight: bold;
+    font-size: 16px;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+#lobbyPlayerList div.player-not-ready {
+    color: #f44336;
+    font-weight: bold;
+    font-size: 16px;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Disabled state for create/join lobby buttons */
+#createLobby:disabled,
+#joinLobby:disabled,
+.join-lobby-container:has(#joinLobby:disabled) #lobbyCodeInput {
+    background: #cccccc;
+    color: #666666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+#createLobby:disabled:hover,
+#joinLobby:disabled:hover {
+    background: #cccccc;
+    transform: none;
+    box-shadow: none;
+}
+
+.join-lobby-container:has(#joinLobby:disabled) {
+    opacity: 0.7;
+}
+
+/* Glow animation for input when it's player's turn */
+@keyframes inputGlow {
+    0% {
+        box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(0, 123, 255, 0.8);
+    }
+    100% {
+        box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    }
+}
+
+/* Style for input when it's enabled (player's turn) */
+#wordGuess:not([disabled]) {
+    animation: inputGlow 2s ease-in-out infinite;
+    border: 2px solid #007bff;
+    background-color: rgba(255, 255, 255, 0.95);
+}
+
+/* Style for input when it's disabled (not player's turn) */
+#wordGuess[disabled] {
+    background-color: rgba(255, 255, 255, 0.7);
+    border: 2px solid #ccc;
+    cursor: not-allowed;
+}
+
+/* Style for buttons when it's not player's turn */
+#submitGuess[disabled],
+#freeSkip[disabled] {
+    background-color: #cccccc;
+    color: #666666;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* Ready/Not Ready States */
+.lobby-ready-controls {
+    margin: 15px 0;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+#readyButton {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+#readyButton:hover:not(:disabled) {
+    background: linear-gradient(135deg, #45a049, #3d8b40);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+}
+
+#unreadyButton {
+    background: linear-gradient(135deg, #f44336, #e53935);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+#unreadyButton:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e53935, #d32f2f);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(244, 67, 54, 0.3);
+}
+
+#readyButton:disabled,
+#unreadyButton:disabled {
+    background: #cccccc;
+    color: #666666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.7;
+}
+
+/* Auth Overlay Styles */
+#authOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.auth-container {
+    background-color: #222;
+    border-radius: 10px;
+    padding: 30px;
+    width: 350px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    text-align: center;
+    color: #fff;
+}
+
+.auth-container h2 {
+    margin-bottom: 20px;
+    color: #4fc3f7;
+}
+
+.auth-button {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin: 15px 0;
+    border: none;
+    border-radius: 5px;
+    background-color: #4285F4;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.auth-button:hover {
+    background-color: #357ae8;
+}
+
+.auth-button.secondary {
+    background-color: #555;
+}
+
+.auth-button.secondary:hover {
+    background-color: #666;
+}
+
+#userProfile {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#profileName {
+    font-weight: bold;
+    color: #4fc3f7;
+}
+
+#signOutBtn {
+    background-color: transparent;
+    color: #f44336;
+    border: 1px solid #f44336;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+#signOutBtn:hover {
+    background-color: #f44336;
+    color: white;
 }

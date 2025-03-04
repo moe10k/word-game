@@ -22,17 +22,48 @@
             </ul>
     </div >
 
+    <!-- Auth Overlay -->
+    <div id="authOverlay">
+        <div class="auth-container">
+            <h2>Welcome to Letter Guess Game</h2>
+            <p>Sign in to play with friends!</p>
+            <button id="googleSignIn" class="auth-button">Sign in with Google</button>
+            <button id="guestSignIn" class="auth-button secondary">Continue as Guest</button>
+        </div>
+    </div>
+
     <div id="leftSidebar">
         <div id="scoreBoard"></div>
         <div id="livesDisplay"></div>
-
+        <div id="userProfile">
+            <span id="profileName"></span>
+            <button id="signOutBtn" style="display: none;">Sign Out</button>
+        </div>
     </div>
 
     <div id="usernameScreen">
         <input type="text" id="usernameInput" placeholder="Enter your username">
-        <button id="joinGame">Join Game</button>
-        <button id="readyButton" style="display: none;">Ready</button>
-        <button id="unreadyButton" style="display: none;" disabled>Unready</button>
+        <button id="joinGame">Set Username</button>
+        
+        <div id="lobbyControls" style="display: none;">
+            <div class="lobby-buttons">
+                <button id="createLobby">Create Lobby</button>
+                <div class="join-lobby-container">
+                    <input type="text" id="lobbyCodeInput" placeholder="Enter Lobby Code">
+                    <button id="joinLobby">Join Lobby</button>
+                </div>
+            </div>
+            <div id="currentLobby" style="display: none;">
+                <h3>Lobby: <span id="lobbyCode"></span></h3>
+                <div id="lobbyPlayerList"></div>
+                <div class="lobby-ready-controls">
+                    <button id="readyButton" style="display: none;">Ready</button>
+                    <button id="unreadyButton" style="display: none;" disabled>Unready</button>
+                </div>
+                <button id="leaveLobby">Leave Lobby</button>
+            </div>
+        </div>
+        
         <div id="playerList"></div>
     </div>
 
@@ -68,11 +99,12 @@
     </div>
 
     <div class="container">
-        <div class="bottom-right-text">V2.8.0</div>
+        <div class="bottom-right-text">V2.9.0</div>
     </div>
 
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js" type="module"></script>
+    <script type="module" src="auth.js"></script>
 </body>
 </html>

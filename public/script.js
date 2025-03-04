@@ -1,5 +1,10 @@
 //script.js
-const socket = io();
+import { getCurrentUser } from './auth.js';
+
+// Expose socket globally so auth.js can access it
+window.socket = io();
+const socket = window.socket;
+
 const elements = {
     usernameScreen: document.getElementById('usernameScreen'),
     usernameInput: document.getElementById('usernameInput'),
@@ -12,14 +17,23 @@ const elements = {
     readyButton: document.getElementById('readyButton'),
     unreadyButton: document.getElementById('unreadyButton'),
     playerTypingStatus: document.getElementById('playerTypingStatus'),
-    playerList: document.getElementById('playerList')
+    playerList: document.getElementById('playerList'),
+    // Lobby elements
+    lobbyControls: document.getElementById('lobbyControls'),
+    createLobbyBtn: document.getElementById('createLobby'),
+    joinLobbyBtn: document.getElementById('joinLobby'),
+    lobbyCodeInput: document.getElementById('lobbyCodeInput'),
+    currentLobby: document.getElementById('currentLobby'),
+    lobbyCode: document.getElementById('lobbyCode'),
+    lobbyPlayerList: document.getElementById('lobbyPlayerList'),
+    leaveLobbyBtn: document.getElementById('leaveLobby')
 };
 
 let myUsername = null;
 let isGameOver = false;
 let gameInProgress = false;
 let hasUsedSkip = false;
-
+let currentLobbyId = null;
 
 function initializeEventListeners() {
     elements.readyButton.addEventListener('click', handleReadyClick);
@@ -28,19 +42,38 @@ function initializeEventListeners() {
     elements.wordGuess.addEventListener('input', handleWordGuessInput);
     elements.wordGuess.addEventListener('keypress', handleWordGuessKeypress);
     elements.submitGuess.addEventListener('click', handleSubmitGuessClick);
+    
+    // Lobby event listeners
+    elements.createLobbyBtn.addEventListener('click', () => {
+        socket.emit('createLobby');
+    });
+    
+    elements.joinLobbyBtn.addEventListener('click', () => {
+        const lobbyId = elements.lobbyCodeInput.value.trim().toUpperCase();
+        if (lobbyId) {
+            socket.emit('joinLobby', lobbyId);
+        } else {
+            showMessage('Please enter a lobby code');
+        }
+    });
+    
+    elements.leaveLobbyBtn.addEventListener('click', () => {
+        socket.emit('leaveLobby');
+    });
 }
 
 function initializeSocketEventHandlers() {
     socket.on('playerTyping', handlePlayerTyping);
     socket.on('usernameError', handleUsernameError);
+    socket.on('usernameSet', handleUsernameSet);
     socket.on('gameUpdate', handleGameUpdate);
-    socket.on('playerStatusUpdate', updatePlayerList);
+    socket.on('playerListUpdate', handlePlayerListUpdate);
     socket.on('gameOver', handleGameOver);
     socket.on('gameWin', handleGameWin);
     socket.on('invalidWord', showMessage);
     socket.on('notYourTurn', () => showMessage("It's not your turn!"));
-    socket.on('gameInProgress', () => showMessage('A game is currently in progress. Please wait for the next round.'));
     socket.on('actionBlocked', showMessage);
+    socket.on('lobbyError', showMessage);
     socket.on('turnUpdate', handleTurnUpdate);
     socket.on('typingCleared', clearGlobalTypingDisplay);
     socket.on('timerUpdate', updateTimerDisplay);
@@ -53,9 +86,34 @@ function initializeSocketEventHandlers() {
     });
     
     socket.on('connect', () => {
-        if (myUsername) {
-            showMessage('Reconnected! Attempting to rejoin game...');
-            socket.emit('setUsername', myUsername);
+        // Check if we have a Firebase user
+        const firebaseUser = getCurrentUser();
+        if (firebaseUser) {
+            console.log('Reconnected with Firebase auth, attempting to restore session...');
+            // Send authentication info to server
+            socket.emit('userAuthenticated', {
+                uid: firebaseUser.uid,
+                displayName: firebaseUser.displayName,
+                email: firebaseUser.email,
+                photoURL: firebaseUser.photoURL
+            });
+            
+            // If we already had a username, try to reclaim it
+            if (myUsername) {
+                console.log('Attempting to reclaim username:', myUsername);
+                socket.emit('setUsername', { 
+                    username: myUsername,
+                    authenticated: true,
+                    uid: firebaseUser.uid
+                });
+            }
+        } else if (myUsername) {
+            // Even if not authenticated with Firebase, try to reclaim username
+            console.log('Attempting to reclaim username as guest:', myUsername);
+            socket.emit('setUsername', { 
+                username: myUsername,
+                authenticated: false
+            });
         }
     });
     
@@ -71,6 +129,55 @@ function initializeSocketEventHandlers() {
             hasUsedSkip = true;
             document.getElementById('freeSkip').disabled = true;
         }
+    });
+    
+    // Lobby event handlers
+    socket.on('lobbyCreated', (lobbyId) => {
+        currentLobbyId = lobbyId;
+        elements.lobbyCode.textContent = lobbyId;
+        elements.lobbyControls.style.display = 'block';
+        elements.currentLobby.style.display = 'block';
+        elements.readyButton.style.display = 'inline';
+        elements.unreadyButton.style.display = 'inline';
+        updateLobbyControlsVisibility(true);
+        showMessage(`Lobby created with code: ${lobbyId}`);
+    });
+    
+    socket.on('lobbyJoined', (lobbyId) => {
+        currentLobbyId = lobbyId;
+        elements.lobbyCode.textContent = lobbyId;
+        elements.lobbyControls.style.display = 'block';
+        elements.currentLobby.style.display = 'block';
+        elements.readyButton.style.display = 'inline';
+        elements.unreadyButton.style.display = 'inline';
+        updateLobbyControlsVisibility(true);
+        showMessage(`Joined lobby: ${lobbyId}`);
+    });
+    
+    socket.on('lobbyUpdate', (data) => {
+        // We're in a lobby, so clear the global player list
+        elements.playerList.innerHTML = '';
+        
+        // Update the lobby player list
+        updateLobbyPlayers(data.players);
+    });
+    
+    socket.on('lobbyError', (message) => {
+        showMessage(message);
+    });
+    
+    socket.on('lobbyLeft', () => {
+        currentLobbyId = null;
+        elements.currentLobby.style.display = 'none';
+        elements.lobbyCode.textContent = '';
+        elements.lobbyPlayerList.innerHTML = '';
+        elements.readyButton.style.display = 'none';
+        elements.unreadyButton.style.display = 'none';
+        updateLobbyControlsVisibility(false);
+        showMessage('Left the lobby');
+        
+        // Request an updated player list since we're now out of the lobby
+        socket.emit('requestPlayerList');
     });
 }
 
@@ -127,15 +234,15 @@ function updateScoreBoard(scores, lives) {
 
 function handleReadyClick() {
     if (!elements.readyButton.disabled) {
-        socket.emit('playerReady');
+        socket.emit('ready', true);
         elements.readyButton.disabled = true;
         elements.unreadyButton.disabled = false;
     }
 }
 
 function handleUnreadyClick() {
-    if (!elements.unreadyButton.disabled){    
-        socket.emit('playerUnready');
+    if (!elements.unreadyButton.disabled) {
+        socket.emit('ready', false);
         elements.unreadyButton.disabled = true;
         elements.readyButton.disabled = false;
     }
@@ -143,24 +250,19 @@ function handleUnreadyClick() {
 
 function handleJoinGameClick() {
     const username = elements.usernameInput.value.trim();
-    if (gameInProgress) {
-        showMessage('A game is currently in progress. Please wait for the next round.');
-        return;
+    if (username) {
+        // Get Firebase user if available
+        const firebaseUser = getCurrentUser();
+        
+        // Send both username and authentication information
+        socket.emit('setUsername', { 
+            username,
+            authenticated: !!firebaseUser,
+            uid: firebaseUser ? firebaseUser.uid : null
+        });
+    } else {
+        handleUsernameError('Please enter a username');
     }
-    if (!username || username.length < 3 || username.length > 20) {
-        showMessage('Invalid username. Must be 3-20 characters long.');
-        return;
-    }
-    myUsername = username;
-    socket.emit('setUsername', username);
-
-    
-    elements.usernameInput.disabled = true;
-
-    elements.joinGameButton.style.display = 'none';
-    elements.readyButton.style.display = 'inline';
-    elements.unreadyButton.style.display = 'inline';
-    elements.unreadyButton.disabled = true;  // Keep disabled initially
 }
 
 let typingTimeout;
@@ -202,16 +304,52 @@ function handleUsernameError(message) {
     elements.usernameInput.value = '';
 }
 
+function handleUsernameSet(username) {
+    myUsername = username;
+    
+    // Save username to localStorage for session persistence
+    try {
+        localStorage.setItem('letterGuessGameUsername', username);
+    } catch (e) {
+        console.warn('Could not save username to localStorage', e);
+    }
+    
+    elements.usernameInput.disabled = true;
+    elements.joinGameButton.style.display = 'none';
+    elements.lobbyControls.style.display = 'block';
+    showMessage('Username set successfully. Create or join a lobby to play!');
+}
+
+// When the page loads, attempt to restore the username
+window.addEventListener('DOMContentLoaded', function() {
+    try {
+        const savedUsername = localStorage.getItem('letterGuessGameUsername');
+        if (savedUsername && !myUsername) {
+            myUsername = savedUsername;
+            console.log('Restored username from localStorage:', myUsername);
+            
+            // Will attempt to reclaim via the socket.on('connect') handler we added
+        }
+    } catch (e) {
+        console.warn('Could not restore username from localStorage', e);
+    }
+});
+
 function handleGameUpdate(data) {
     try {
-        gameInProgress = data.gameStarted;
-        if (data.gameStarted) {
+        // Update game state flag based on received data
+        gameInProgress = data.gameStarted === true;
+        
+        // Only update UI if game is actually started
+        if (gameInProgress) {
             elements.gameScreen.style.display = 'block';
             elements.usernameScreen.style.display = 'none';
-        }
-        elements.letterDisplay.textContent = data.letters || '';
-        if (data.scores && data.lives) {
-            updateScoreBoard(data.scores, data.lives);
+            elements.letterDisplay.textContent = data.letters || '';
+            
+            // Only update score/lives display if we're in a game
+            if (data.scores && data.lives) {
+                updateScoreBoard(data.scores, data.lives);
+            }
         }
     } catch (error) {
         console.error('Error handling game update:', error);
@@ -312,54 +450,73 @@ function checkStylesOnLoad() {
 document.addEventListener('DOMContentLoaded', checkStylesOnLoad);
 
 function resetFrontendUI() {
-    // Game state reset
-    isGameOver = false;
-    gameInProgress = false;
-    myUsername = null;
-    hasUsedSkip = false;
-    
-    // UI elements reset
-    elements.wordGuess.disabled = true;
-    elements.submitGuess.disabled = true;
-    elements.wordGuess.value = '';
-    elements.usernameInput.disabled = false;
-    elements.usernameInput.value = ''; 
-    
-    // Button states
-    elements.joinGameButton.style.display = 'inline';
-    elements.readyButton.style.display = 'none';
+    elements.gameScreen.style.display = 'none';
+    elements.usernameScreen.style.display = 'block';
+    elements.wordGuess.disabled = false;
+    elements.submitGuess.disabled = false;
     elements.readyButton.disabled = false;
     elements.unreadyButton.disabled = true;
-    document.getElementById('freeSkip').disabled = true;
-    
-    // Display states
-    document.getElementById('game').style.display = 'none';
-    document.getElementById('winnerModal').style.display = 'none';
-    document.getElementById('usernameScreen').style.display = 'block';
-    
-    // Clear all dynamic content
-    document.getElementById('playerList').innerHTML = '';
-    document.getElementById('scoreBoard').innerHTML = '';
-    document.getElementById('playerTypingStatus').innerHTML = '';
-    document.getElementById('livesDisplay').innerHTML = '';
+    elements.wordGuess.value = '';
+    document.getElementById('currentTurn').textContent = '';
     document.getElementById('letterDisplay').textContent = '';
-    document.getElementById('player-statuses').innerHTML = '';
-    document.getElementById('globalTypingDisplay').innerHTML = '';
+    document.getElementById('scoreBoard').innerHTML = '';
+    document.getElementById('playerList').innerHTML = '';
+    document.getElementById('globalTypingDisplay').textContent = '';
     document.getElementById('timerDisplay').textContent = '';
+    isGameOver = false;
+    gameInProgress = false;
+    hasUsedSkip = false;
     
-    // Clear any pending timers on the client side
-    clearTimeout(window.typingTimeout);
-    
-    // Inform the user
-    showMessage('Game has been reset. Please join again.');
-    
-    // Clear any remaining event listeners
-    window.onclick = null;
-    
-    // Re-initialize event listeners to ensure clean state
-    initializeEventListeners();
+    // Reset lobby UI
+    if (!currentLobbyId) {
+        elements.currentLobby.style.display = 'none';
+        elements.lobbyCode.textContent = '';
+        elements.lobbyPlayerList.innerHTML = '';
+        updateLobbyControlsVisibility(false);
+    } else {
+        updateLobbyControlsVisibility(true);
+    }
 }
 
+function updateLobbyPlayers(players) {
+    elements.lobbyPlayerList.innerHTML = '';
+    players.forEach(player => {
+        const playerElement = document.createElement('div');
+        playerElement.textContent = `${player.name} - ${player.ready ? 'Ready' : 'Not Ready'}`;
+        playerElement.classList.add(player.ready ? 'player-ready' : 'player-not-ready');
+        elements.lobbyPlayerList.appendChild(playerElement);
+    });
+}
 
-initializeEventListeners();
-initializeSocketEventHandlers();
+// Add this function to update lobby controls
+function updateLobbyControlsVisibility(inLobby) {
+    elements.createLobbyBtn.disabled = inLobby;
+    elements.joinLobbyBtn.disabled = inLobby;
+    elements.lobbyCodeInput.disabled = inLobby;
+}
+
+// Add this new function to handle player list updates without showing game data
+function handlePlayerListUpdate(playerList) {
+    if (!gameInProgress) {
+        // Clear any existing scoreboard
+        elements.scoreBoard.innerHTML = '';
+        
+        // Only show the global player list if not in a lobby
+        if (!currentLobbyId) {
+            // Make sure we're dealing with an array of player objects
+            if (Array.isArray(playerList)) {
+                // Only update if we're not in a game
+                updatePlayerList(playerList);
+            } else {
+                console.error('Invalid player list format:', playerList);
+            }
+        }
+    }
+}
+
+// Initialize everything when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    initializeEventListeners();
+    initializeSocketEventHandlers();
+    checkStylesOnLoad();
+});
