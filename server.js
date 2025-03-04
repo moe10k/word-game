@@ -1,6 +1,7 @@
 // server.js
 
 // Imports and Initial Setup
+require('dotenv').config(); // Load environment variables
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -12,6 +13,20 @@ const server = http.createServer(app);
 const io = socketIo(server);
 app.use(express.static('public'));
 
+// Add endpoint to serve Firebase config securely
+app.get('/api/firebase-config', (req, res) => {
+  const firebaseConfig = {
+    apiKey: process.env.FIREBASE_API_KEY,
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.FIREBASE_APP_ID,
+    measurementId: process.env.FIREBASE_MEASUREMENT_ID
+  };
+  res.json(firebaseConfig);
+});
+
 // Global Variables
 let currentLetters = generateRandomLetters();
 let scores = {};
@@ -22,6 +37,9 @@ let readyPlayers = 0;
 let currentPlayerTurn = null;
 let gameInProgress = false;
 let playerTimer = {};
+
+// Add authentication tracking
+let authenticatedUsers = {}; // { socketId: { uid, displayName, email, photoURL } }
 
 // Lobby System
 let lobbies = {};  // { lobbyId: { players: {}, gameState: {}, inProgress: false } }
@@ -54,9 +72,16 @@ function joinLobby(socket, lobbyId) {
         return false;
     }
     
+    // Get username from userMap
+    const username = userMap[socket.id];
+    if (!username) {
+        socket.emit('lobbyError', 'Please set a username first');
+        return false;
+    }
+    
     // Check for duplicate names in the target lobby
     const isDuplicateName = Object.values(lobbies[lobbyId].players)
-        .some(player => player.name === socket.username);
+        .some(player => player.name === username);
     if (isDuplicateName) {
         socket.emit('lobbyError', 'Username already exists in this lobby');
         return false;
@@ -68,7 +93,7 @@ function joinLobby(socket, lobbyId) {
     }
     
     playerLobbies[socket.id] = lobbyId;
-    lobbies[lobbyId].players[socket.id] = { name: socket.username, ready: false };
+    lobbies[lobbyId].players[socket.id] = { name: username, ready: false };
     
     // Immediately send current lobby state to the new player
     const playerStatus = Object.entries(lobbies[lobbyId].players).map(([_, player]) => ({
@@ -126,20 +151,48 @@ function generateRandomLetters() { // Generates two random letters for the curre
 }
 
 function logAllPlayers() { 
-    const playerList = Object.keys(userMap).map(socketId => {
-        const username = userMap[socketId].name || 'not set';
-        return `${username}`;
+    const playerList = Object.entries(userMap).map(([socketId, username]) => {
+        return username || 'not set';
     }).join(', ');
     
     log(`Current Players: ${playerList}`, 'logAllPlayers');
 }
 
-function updateAllPlayers() { // Updates all connected players with the current game state (leteers, scores, lives)
-    io.emit('gameUpdate', {
-        letters: currentLetters,
-        scores: scores,
-        lives: lives
+function updateAllPlayers() { // Updates all connected players with the current game state (letters, scores, lives)
+    // Instead of broadcasting all players to everyone, we'll send personalized lists to each player
+    
+    // For each connected socket
+    Object.keys(userMap).forEach(socketId => {
+        const socket = io.sockets.sockets.get(socketId);
+        if (!socket) return; // Skip if socket is no longer connected
+        
+        // Check if player is in a lobby
+        const lobbyId = playerLobbies[socketId];
+        
+        if (lobbyId && lobbies[lobbyId]) {
+            // If in a lobby, only show players from same lobby - this is already handled by updateLobbyPlayers
+            // No need to do anything here, as updateLobbyPlayers is called whenever lobby state changes
+        } else {
+            // If not in a lobby, only show this player
+            const username = userMap[socketId];
+            const soloPlayerList = [{
+                name: username,
+                ready: false
+            }];
+            
+            socket.emit('playerListUpdate', soloPlayerList);
+        }
     });
+    
+    // Only send game data if game is in progress
+    if (gameInProgress) {
+        io.emit('gameUpdate', {
+            letters: currentLetters,
+            scores: scores,
+            lives: lives,
+            gameStarted: gameInProgress
+        });
+    }
 }
 
 function handleError(socket, error, context = '') { // Logs an error to the console and emits an error message to the client
@@ -153,39 +206,12 @@ function handleError(socket, error, context = '') { // Logs an error to the cons
     }
 }
 
-function log(message, context = '') { // Logs a message to the console with a timestamp and optional context
+function log(message, context = '') {
     const timestamp = new Date().toISOString();
-    const logMessage = context ? `[${context}] ${message}` : message;
-    console.log(`[${timestamp}] ${logMessage}`);
+    console.log(`[${timestamp}] ${context ? `[${context}] ` : ''}${message}`);
 }
-
 
 // Socket Event Handlers
-function setUsernameHandler(socket) {
-    return function(username) {
-        try {
-            if (!username || typeof username !== 'string' || username.length < 3 || username.length > 20) {
-                socket.emit('usernameError', 'Invalid username. Must be 3-20 characters long.');
-                return;
-            }
-            
-            // Check if username is taken in any lobby
-            for (const lobbyId in lobbies) {
-                if (Object.values(lobbies[lobbyId].players).some(player => player.name === username)) {
-                    socket.emit('usernameError', 'Username already taken');
-                    return;
-                }
-            }
-            
-            socket.username = username;
-            socket.emit('usernameSet', username);
-            log(`Username set for ${socket.id}: ${username}`, 'setUsernameHandler');
-        } catch (error) {
-            handleError(socket, error, 'setUsernameHandler');
-        }
-    };
-}
-
 function guessHandler(socket) {
     return async function (word) {
         try {
@@ -224,7 +250,14 @@ function canPlayerGuess(socket) {
         return false;
     }
 
-    const playerLives = lobby.gameState.lives[socket.username];
+    // Get username from userMap
+    const username = userMap[socket.id];
+    if (!username) {
+        socket.emit('actionBlocked', 'Username not found.');
+        return false;
+    }
+
+    const playerLives = lobby.gameState.lives[username];
     if (!playerLives || playerLives <= 0) {
         socket.emit('actionBlocked', 'You have no lives remaining.');
         return false;
@@ -270,7 +303,10 @@ function setPlayerReady(socket, isReady) {
             return;
         }
         
-        log(`${socket.username} is ${isReady ? 'Ready' : 'Unready'}!`, 'setPlayerReady');
+        // Get username from userMap instead of socket.username
+        const username = userMap[socket.id] || 'Unknown player';
+        
+        log(`${username} is ${isReady ? 'Ready' : 'Unready'}!`, 'setPlayerReady');
         lobbies[lobbyId].players[socket.id].ready = isReady;
         
         // Update lobby state
@@ -446,8 +482,20 @@ function isPlayersTurn(socket) { // Checks if it is the player's turn to guess
 }
 
 function hasPlayerLives(socket) { // Checks if the player has any lives remaining
-    if (lives[socket.username] <= 0) {
-        console.log(`${socket.username} has no more lives. Guess ignored.`);
+    // Get username from userMap
+    const username = userMap[socket.id];
+    
+    // Check if the player has lives in the correct lobby
+    const lobbyId = playerLobbies[socket.id];
+    if (!lobbyId || !lobbies[lobbyId]) {
+        socket.emit('actionBlocked', 'You must be in a game to make a guess.');
+        return false;
+    }
+    
+    // Get current lives from the lobby game state
+    if (lobbies[lobbyId].gameState.lives[username] <= 0) {
+        socket.emit('actionBlocked', 'You have no lives remaining.');
+        console.log(`${username} has no more lives. Guess ignored.`);
         return false;
     }
     return true;
@@ -458,9 +506,16 @@ function handleInvalidGuess(socket) {
     const lobby = lobbies[lobbyId];
     if (!lobby) return;
 
+    // Get username from userMap
+    const username = userMap[socket.id];
+    if (!username) {
+        console.error(`Username not found for socket ${socket.id}`);
+        return;
+    }
+
     const gameState = lobby.gameState;
     socket.emit('invalidWord', 'The word is not valid');
-    gameState.lives[socket.username] = (gameState.lives[socket.username] || 1) - 1;
+    gameState.lives[username] = (gameState.lives[username] || 1) - 1;
     
     // Update all players in the lobby
     io.to(lobbyId).emit('gameUpdate', {
@@ -470,7 +525,7 @@ function handleInvalidGuess(socket) {
         gameStarted: true
     });
 
-    if (gameState.lives[socket.username] <= 0) {
+    if (gameState.lives[username] <= 0) {
         socket.emit('gameOver');
     }
 }
@@ -480,8 +535,15 @@ function handleValidGuess(socket, word) {
     const lobby = lobbies[lobbyId];
     if (!lobby) return;
 
+    // Get username from userMap
+    const username = userMap[socket.id];
+    if (!username) {
+        console.error(`Username not found for socket ${socket.id}`);
+        return;
+    }
+
     const gameState = lobby.gameState;
-    gameState.scores[socket.username] = (gameState.scores[socket.username] || 0) + 1;
+    gameState.scores[username] = (gameState.scores[username] || 0) + 1;
     gameState.currentLetters = generateRandomLetters();
     
     // Update all players in the lobby
@@ -561,10 +623,13 @@ function handlePlayerDisconnect(socket) {
         // Clear the timer for this player
         clearPlayerTimer(socket.id);
         
+        // Get username from userMap
+        const username = userMap[socket.id];
+        
         // Remove player from game state
-        if (socket.username) {
-            delete lobby.gameState.scores[socket.username];
-            delete lobby.gameState.lives[socket.username];
+        if (username) {
+            delete lobby.gameState.scores[username];
+            delete lobby.gameState.lives[username];
         }
         
         // Remove player from lobby
@@ -602,7 +667,7 @@ function handlePlayerDisconnect(socket) {
             delete lobbies[lobbyId];
         }
 
-        log(`Player ${socket.username || socket.id} disconnected from lobby ${lobbyId}`, 'handlePlayerDisconnect');
+        log(`Player ${username || socket.id} disconnected from lobby ${lobbyId}`, 'handlePlayerDisconnect');
     } catch (error) {
         handleError(null, error, 'handlePlayerDisconnect');
     }
@@ -698,11 +763,111 @@ function resetLobby(lobbyId) {
     updateLobbyPlayers(lobbyId);
 }
 
+// Add this function to check for and remove stale sessions
+function checkForStaleSessions(username) {
+    // Look for any socket IDs that have this username
+    const existingSockets = Object.entries(userMap)
+        .filter(([_, existingUsername]) => existingUsername === username)
+        .map(([socketId, _]) => socketId);
+    
+    if (existingSockets.length > 0) {
+        log(`Found ${existingSockets.length} potential stale sessions for username: ${username}`, 'checkForStaleSessions');
+        
+        // Check if these sockets are still connected
+        existingSockets.forEach(socketId => {
+            const socket = io.sockets.sockets.get(socketId);
+            if (!socket || !socket.connected) {
+                log(`Cleaning up stale session: ${socketId}`, 'checkForStaleSessions');
+                
+                // Clean up all references to this socket
+                delete userMap[socketId];
+                delete scores[socketId];
+                delete lives[socketId];
+                if (authenticatedUsers[socketId]) {
+                    delete authenticatedUsers[socketId];
+                }
+                
+                // Clean up from lobbies
+                const lobbyId = playerLobbies[socketId];
+                if (lobbyId && lobbies[lobbyId]) {
+                    delete lobbies[lobbyId].players[socketId];
+                    delete playerLobbies[socketId];
+                    
+                    // If lobby is empty, delete it
+                    if (Object.keys(lobbies[lobbyId].players).length === 0) {
+                        delete lobbies[lobbyId];
+                    } else {
+                        updateLobbyPlayers(lobbyId);
+                    }
+                }
+            }
+        });
+    }
+}
+
 // Socket Connection
 io.on('connection', (socket) => {
     log(`New connection: ${socket.id}`, 'socketConnection');
     
-    socket.on('setUsername', setUsernameHandler(socket));
+    // Handle user authentication
+    socket.on('userAuthenticated', (userData) => {
+        log(`User authenticated: ${userData.displayName} (${userData.uid})`);
+        // Store authenticated user data
+        authenticatedUsers[socket.id] = userData;
+    });
+    
+    socket.on('userSignedOut', () => {
+        log(`User signed out: ${socket.id}`);
+        delete authenticatedUsers[socket.id];
+    });
+    
+    // Update setUsername handler
+    socket.on('setUsername', (data) => {
+        let username;
+        let isAuthenticated = false;
+        let uid = null;
+        
+        // Check if we received an object (new format) or string (old format for backward compatibility)
+        if (typeof data === 'object') {
+            username = data.username;
+            isAuthenticated = data.authenticated;
+            uid = data.uid;
+        } else {
+            username = data; // Old format - just a username string
+        }
+        
+        if (!username || typeof username !== 'string' || username.trim().length < 3 || username.trim().length > 20) {
+            socket.emit('usernameError', 'Invalid username. Must be 3-20 characters long.');
+            return;
+        }
+        
+        // Attempt to clean up any stale sessions with this username
+        checkForStaleSessions(username);
+        
+        // Check for existing username again after cleaning stale sessions
+        const isUsernameTaken = Object.values(userMap).includes(username);
+        if (isUsernameTaken) {
+            socket.emit('usernameError', 'Username already taken');
+            return;
+        }
+        
+        userMap[socket.id] = username;
+        log(`Username set: ${username} (${socket.id}) - Authenticated: ${isAuthenticated}`);
+        scores[socket.id] = 0;
+        lives[socket.id] = 3;
+        totalPlayers++;
+        
+        // If the user is authenticated, store additional info
+        if (isAuthenticated && uid) {
+            log(`Linking authenticated user ${uid} with socket ${socket.id}`);
+            // You could store additional info here if needed
+        }
+        
+        socket.emit('usernameSet', username);
+        socket.emit('lobbyControlsShow');
+        updateAllPlayers();
+    });
+    
     socket.on('guess', guessHandler(socket));
     socket.on('ready', (isReady) => setPlayerReady(socket, isReady));
     socket.on('typing', typingHandler(socket));
@@ -710,7 +875,8 @@ io.on('connection', (socket) => {
     
     // Lobby System Events
     socket.on('createLobby', () => {
-        if (!socket.username) {
+        // Check if username is set using userMap
+        if (!userMap[socket.id]) {
             socket.emit('lobbyError', 'Please set a username first');
             return;
         }
@@ -720,7 +886,8 @@ io.on('connection', (socket) => {
     });
     
     socket.on('joinLobby', (lobbyId) => {
-        if (!socket.username) {
+        // Check if username is set using userMap
+        if (!userMap[socket.id]) {
             socket.emit('lobbyError', 'Please set a username first');
             return;
         }
@@ -740,8 +907,37 @@ io.on('connection', (socket) => {
     });
     
     socket.on('disconnect', () => {
+        // Remove the player from any lobby they're in
         leaveLobby(socket);
         handlePlayerDisconnect(socket);
+        
+        // Clean up global player data
+        if (userMap[socket.id]) {
+            log(`Cleaning up disconnected player: ${userMap[socket.id]} (${socket.id})`, 'disconnect');
+            delete userMap[socket.id];
+            delete scores[socket.id];
+            delete lives[socket.id];
+            if (authenticatedUsers[socket.id]) {
+                delete authenticatedUsers[socket.id];
+            }
+            totalPlayers = Math.max(0, totalPlayers - 1);
+            
+            // Notify all remaining clients to update their player lists
+            updateAllPlayers();
+        }
+    });
+
+    // Add this event handler for when a client requests their player list
+    socket.on('requestPlayerList', () => {
+        // Send this player only their own player info
+        if (userMap[socket.id]) {
+            const soloPlayerList = [{
+                name: userMap[socket.id],
+                ready: false
+            }];
+            
+            socket.emit('playerListUpdate', soloPlayerList);
+        }
     });
 });
 

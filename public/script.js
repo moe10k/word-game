@@ -1,5 +1,10 @@
 //script.js
-const socket = io();
+import { getCurrentUser } from './auth.js';
+
+// Expose socket globally so auth.js can access it
+window.socket = io();
+const socket = window.socket;
+
 const elements = {
     usernameScreen: document.getElementById('usernameScreen'),
     usernameInput: document.getElementById('usernameInput'),
@@ -62,11 +67,13 @@ function initializeSocketEventHandlers() {
     socket.on('usernameError', handleUsernameError);
     socket.on('usernameSet', handleUsernameSet);
     socket.on('gameUpdate', handleGameUpdate);
+    socket.on('playerListUpdate', handlePlayerListUpdate);
     socket.on('gameOver', handleGameOver);
     socket.on('gameWin', handleGameWin);
     socket.on('invalidWord', showMessage);
     socket.on('notYourTurn', () => showMessage("It's not your turn!"));
     socket.on('actionBlocked', showMessage);
+    socket.on('lobbyError', showMessage);
     socket.on('turnUpdate', handleTurnUpdate);
     socket.on('typingCleared', clearGlobalTypingDisplay);
     socket.on('timerUpdate', updateTimerDisplay);
@@ -79,9 +86,34 @@ function initializeSocketEventHandlers() {
     });
     
     socket.on('connect', () => {
-        if (myUsername) {
-            showMessage('Reconnected! Attempting to rejoin game...');
-            socket.emit('setUsername', myUsername);
+        // Check if we have a Firebase user
+        const firebaseUser = getCurrentUser();
+        if (firebaseUser) {
+            console.log('Reconnected with Firebase auth, attempting to restore session...');
+            // Send authentication info to server
+            socket.emit('userAuthenticated', {
+                uid: firebaseUser.uid,
+                displayName: firebaseUser.displayName,
+                email: firebaseUser.email,
+                photoURL: firebaseUser.photoURL
+            });
+            
+            // If we already had a username, try to reclaim it
+            if (myUsername) {
+                console.log('Attempting to reclaim username:', myUsername);
+                socket.emit('setUsername', { 
+                    username: myUsername,
+                    authenticated: true,
+                    uid: firebaseUser.uid
+                });
+            }
+        } else if (myUsername) {
+            // Even if not authenticated with Firebase, try to reclaim username
+            console.log('Attempting to reclaim username as guest:', myUsername);
+            socket.emit('setUsername', { 
+                username: myUsername,
+                authenticated: false
+            });
         }
     });
     
@@ -123,6 +155,10 @@ function initializeSocketEventHandlers() {
     });
     
     socket.on('lobbyUpdate', (data) => {
+        // We're in a lobby, so clear the global player list
+        elements.playerList.innerHTML = '';
+        
+        // Update the lobby player list
         updateLobbyPlayers(data.players);
     });
     
@@ -139,6 +175,9 @@ function initializeSocketEventHandlers() {
         elements.unreadyButton.style.display = 'none';
         updateLobbyControlsVisibility(false);
         showMessage('Left the lobby');
+        
+        // Request an updated player list since we're now out of the lobby
+        socket.emit('requestPlayerList');
     });
 }
 
@@ -211,11 +250,19 @@ function handleUnreadyClick() {
 
 function handleJoinGameClick() {
     const username = elements.usernameInput.value.trim();
-    if (!username || username.length < 3 || username.length > 20) {
-        showMessage('Invalid username. Must be 3-20 characters long.');
-        return;
+    if (username) {
+        // Get Firebase user if available
+        const firebaseUser = getCurrentUser();
+        
+        // Send both username and authentication information
+        socket.emit('setUsername', { 
+            username,
+            authenticated: !!firebaseUser,
+            uid: firebaseUser ? firebaseUser.uid : null
+        });
+    } else {
+        handleUsernameError('Please enter a username');
     }
-    socket.emit('setUsername', username);
 }
 
 let typingTimeout;
@@ -259,22 +306,50 @@ function handleUsernameError(message) {
 
 function handleUsernameSet(username) {
     myUsername = username;
+    
+    // Save username to localStorage for session persistence
+    try {
+        localStorage.setItem('letterGuessGameUsername', username);
+    } catch (e) {
+        console.warn('Could not save username to localStorage', e);
+    }
+    
     elements.usernameInput.disabled = true;
     elements.joinGameButton.style.display = 'none';
     elements.lobbyControls.style.display = 'block';
     showMessage('Username set successfully. Create or join a lobby to play!');
 }
 
+// When the page loads, attempt to restore the username
+window.addEventListener('DOMContentLoaded', function() {
+    try {
+        const savedUsername = localStorage.getItem('letterGuessGameUsername');
+        if (savedUsername && !myUsername) {
+            myUsername = savedUsername;
+            console.log('Restored username from localStorage:', myUsername);
+            
+            // Will attempt to reclaim via the socket.on('connect') handler we added
+        }
+    } catch (e) {
+        console.warn('Could not restore username from localStorage', e);
+    }
+});
+
 function handleGameUpdate(data) {
     try {
-        gameInProgress = data.gameStarted;
-        if (data.gameStarted) {
+        // Update game state flag based on received data
+        gameInProgress = data.gameStarted === true;
+        
+        // Only update UI if game is actually started
+        if (gameInProgress) {
             elements.gameScreen.style.display = 'block';
             elements.usernameScreen.style.display = 'none';
-        }
-        elements.letterDisplay.textContent = data.letters || '';
-        if (data.scores && data.lives) {
-            updateScoreBoard(data.scores, data.lives);
+            elements.letterDisplay.textContent = data.letters || '';
+            
+            // Only update score/lives display if we're in a game
+            if (data.scores && data.lives) {
+                updateScoreBoard(data.scores, data.lives);
+            }
         }
     } catch (error) {
         console.error('Error handling game update:', error);
@@ -418,6 +493,25 @@ function updateLobbyControlsVisibility(inLobby) {
     elements.createLobbyBtn.disabled = inLobby;
     elements.joinLobbyBtn.disabled = inLobby;
     elements.lobbyCodeInput.disabled = inLobby;
+}
+
+// Add this new function to handle player list updates without showing game data
+function handlePlayerListUpdate(playerList) {
+    if (!gameInProgress) {
+        // Clear any existing scoreboard
+        elements.scoreBoard.innerHTML = '';
+        
+        // Only show the global player list if not in a lobby
+        if (!currentLobbyId) {
+            // Make sure we're dealing with an array of player objects
+            if (Array.isArray(playerList)) {
+                // Only update if we're not in a game
+                updatePlayerList(playerList);
+            } else {
+                console.error('Invalid player list format:', playerList);
+            }
+        }
+    }
 }
 
 // Initialize everything when the page loads

@@ -22,10 +22,23 @@
             </ul>
     </div >
 
+    <!-- Auth Overlay -->
+    <div id="authOverlay">
+        <div class="auth-container">
+            <h2>Welcome to Letter Guess Game</h2>
+            <p>Sign in to play with friends!</p>
+            <button id="googleSignIn" class="auth-button">Sign in with Google</button>
+            <button id="guestSignIn" class="auth-button secondary">Continue as Guest</button>
+        </div>
+    </div>
+
     <div id="leftSidebar">
         <div id="scoreBoard"></div>
         <div id="livesDisplay"></div>
-
+        <div id="userProfile">
+            <span id="profileName"></span>
+            <button id="signOutBtn" style="display: none;">Sign Out</button>
+        </div>
     </div>
 
     <div id="usernameScreen">
@@ -91,6 +104,7 @@
 
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js" type="module"></script>
+    <script type="module" src="auth.js"></script>
 </body>
 </html>
