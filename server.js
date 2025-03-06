@@ -817,8 +817,27 @@ io.on('connection', (socket) => {
     });
     
     socket.on('userSignedOut', () => {
-        log(`User signed out: ${socket.id}`);
-        delete authenticatedUsers[socket.id];
+        // Remove the player from any lobby they're in
+        leaveLobby(socket);
+        handlePlayerDisconnect(socket);
+        
+        // Clean up global player data
+        if (userMap[socket.id]) {
+            log(`Cleaning up signed out player: ${userMap[socket.id]} (${socket.id})`, 'userSignedOut');
+            delete userMap[socket.id];
+            delete scores[socket.id];
+            delete lives[socket.id];
+            if (authenticatedUsers[socket.id]) {
+                delete authenticatedUsers[socket.id];
+            }
+            totalPlayers = Math.max(0, totalPlayers - 1);
+            
+            // Notify all remaining clients to update their player lists
+            updateAllPlayers();
+        }
+        
+        // Instead of disconnecting, just emit a success event
+        socket.emit('signOutComplete');
     });
     
     // Update setUsername handler
