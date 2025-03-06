@@ -717,15 +717,20 @@ button:hover {
 
 #signOutBtn {
     background-color: transparent;
-    color: #f44336;
-    border: 1px solid #f44336;
+    color: #ff4444;
+    border: 1px solid #ff4444;
     padding: 5px 10px;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
-    transition: all 0.3s;
+    margin-left: 10px;
+}
+
+#signOutBtn.sign-in {
+    background-color: transparent;
+    color: #4CAF50;
+    border: 1px solid #4CAF50;  /* Green color for Sign In */
 }
 
 #signOutBtn:hover {
-    background-color: #f44336;
-    color: white;
+    opacity: 0.9;
 }
