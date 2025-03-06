@@ -48,11 +48,11 @@
         
         <div id="lobbyControls" style="display: none;">
             <div class="lobby-buttons">
-                <div class="join-lobby-container">
+                <button id="joinLobby">Join Lobby</button>
+                <div id="joinLobbyInput" style="display: none;">
                     <input type="text" id="lobbyCodeInput" placeholder="Enter Lobby Code">
-                    <button id="joinLobby">Join Lobby</button>
                 </div>
-                <h1>or</h1>
+                <div class="divider">or</div>
                 <button id="createLobby">Create Lobby</button>
             </div>
             <div id="currentLobby" style="display: none;">
@@ -63,6 +63,10 @@
                     <button id="unreadyButton" style="display: none;" disabled>Unready</button>
                 </div>
                 <button id="leaveLobby">Leave Lobby</button>
+            </div>
+            <div id="leaderboardSection" class="leaderboard-section">
+                <h3>Global Leaderboard</h3>
+                <div id="leaderboardList"></div>
             </div>
         </div>
         
@@ -86,26 +90,34 @@
 
     <!-- The Modal -->
     <div id="winnerModal" class="modal">
-    <!-- Modal content -->
-    <div class="modal-content">
-        <div class="modal-header">
-            <h1 id="winnerAnnouncement">Congratulations, <span id="winnerName"></span>!</h1>
+        <!-- Modal content -->
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="modal-header">
+                <h1 id="winnerAnnouncement">Congratulations, <span id="winnerName"></span>!</h1>
+            </div>
+            <div class="modal-body">
+                <p>You are the winner!</p>
+                <p>Your score has been recorded on the leaderboard.</p>
+            </div>
+            <div class="modal-footer">
+                <button id="resetGame">Play Again</button>
+            </div>
         </div>
-        <div class="modal-body">
-            <p>You are the winner!</p>
-        </div>
-        <div class="modal-footer">
-            <button id="resetGame">Reset Game</button>
-        </div>
-    </div>
     </div>
 
     <div class="container">
-        <div class="bottom-right-text">V3.1.2</div>
+        <div class="bottom-right-text">V3.2</div>
     </div>
 
 
     <script src="/socket.io/socket.io.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <!-- Load leaderboard.js before other modules that might use it -->
+    <script src="leaderboard.js"></script>
     <script src="script.js" type="module"></script>
     <script type="module" src="auth.js"></script>
 </body>

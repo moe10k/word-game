@@ -325,56 +325,83 @@ button:hover {
 .modal {
     display: none;
     position: fixed;
-    z-index: 100; /* Make sure this is higher than other elements */
+    z-index: 1000;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.7); /* Darker background for better visibility */
+    background-color: rgba(0,0,0,0.7);
 }
 
 .modal-content {
+    position: relative;
     background-color: #fefefe;
     margin: 15% auto;
     padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
     border-radius: 10px;
-    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
-    width: 50%;
-    min-width: 300px; /* Ensure it's not too small on mobile */
-    position: relative; /* For positioning the close button */
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .modal-header {
-    padding: 10px 20px;
-    background: #4CAF50; /* Green header for winning */
-    color: white;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    text-align: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #ddd;
+}
+
+.modal-header h1 {
+    margin: 0;
+    color: #333;
+    font-size: 24px;
 }
 
 .modal-body {
-    padding: 20px;
-    text-align: center;
-    font-size: 1.2em;
+    padding: 20px 0;
 }
 
 .modal-footer {
-    padding: 10px 20px;
-    background: #f1f1f1;
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
+    padding: 10px 0;
+    border-top: 1px solid #ddd;
     text-align: right;
 }
 
-/* Button Style */
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    position: absolute;
+    right: 20px;
+    top: 10px;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
 #resetGame {
     background-color: #4CAF50;
     color: white;
-    padding: 12px 24px;
+    padding: 10px 20px;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 16px;
     transition: background-color 0.3s;
@@ -384,11 +411,11 @@ button:hover {
     background-color: #45a049;
 }
 
+/* Winner Name Highlight */
 #winnerName {
-    font-weight: bold;
     color: #4CAF50;
+    font-weight: bold;
 }
-
 
 .bottom-right-text {
     position: absolute; /* Position the text absolutely within the container */
@@ -410,9 +437,10 @@ button:hover {
 }
 
 .lobby-buttons {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
 }
 
 .join-lobby-container {
@@ -424,23 +452,9 @@ button:hover {
     border-radius: 10px;
 }
 
-#lobbyCodeInput {
-    padding: 12px 15px;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.9);
-    text-transform: uppercase;
-    font-size: 16px;
-    transition: all 0.3s ease;
-    order: 2;
-}
-
-#joinLobby {
-    order: 1;
-}
-
-#createLobby,
-#leaveLobby {
+#joinLobby,
+#createLobby {
+    width: 100%;
     padding: 12px 24px;
     border: none;
     border-radius: 8px;
@@ -452,16 +466,40 @@ button:hover {
     transition: all 0.3s ease;
 }
 
-#createLobby {
+#joinLobby {
     background: linear-gradient(135deg, #4CAF50, #45a049);
     color: white;
-    width: 100%;
 }
 
-#createLobby:hover {
+#joinLobby:hover {
     background: linear-gradient(135deg, #45a049, #3d8b40);
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+}
+
+#joinLobbyInput {
+    width: 100%;
+    margin-top: -10px;
+}
+
+#lobbyCodeInput {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    text-transform: uppercase;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.divider {
+    color: white;
+    text-align: center;
+    font-size: 18px;
+    margin: 5px 0;
+    font-weight: 500;
 }
 
 #leaveLobby {
@@ -733,4 +771,106 @@ button:hover {
 
 #signOutBtn:hover {
     opacity: 0.9;
+}
+
+.leaderboard-section {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    color: white;
+}
+
+.leaderboard-section h3 {
+    margin: 0 0 15px 0;
+    text-align: center;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+#leaderboardList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.leaderboard-entry {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.leaderboard-entry .rank {
+    font-weight: bold;
+    color: #ffd700;
+    margin-right: 10px;
+}
+
+.leaderboard-entry .username {
+    flex-grow: 1;
+    color: #fff;
+}
+
+.leaderboard-entry .score {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.leaderboard-entry .stats {
+    font-size: 12px;
+    color: #ccc;
+    margin-left: 10px;
+}
+
+.leaderboard-message {
+    padding: 20px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin: 10px 0;
+    text-align: left;
+}
+
+.leaderboard-message p {
+    color: #4fc3f7;
+    font-size: 16px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.leaderboard-message ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.leaderboard-message li {
+    color: #fff;
+    padding: 5px 0;
+    font-size: 14px;
+    text-align: center;
+}
+
+.leaderboard-message li:before {
+    content: "✓";
+    color: #4CAF50;
+    margin-right: 8px;
+}
+
+.leaderboard-entry.current-user {
+    background-color: rgba(76, 175, 80, 0.2);
+    border: 1px solid #4CAF50;
+}
+
+.leaderboard-message.error {
+    background-color: rgba(244, 67, 54, 0.1);
+    border: 1px solid #f44336;
+    color: #f44336;
+}
+
+.leaderboard-message.error p {
+    color: #f44336;
 }

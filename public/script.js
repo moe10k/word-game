@@ -27,7 +27,9 @@ const elements = {
     currentLobby: document.getElementById('currentLobby'),
     lobbyCode: document.getElementById('lobbyCode'),
     lobbyPlayerList: document.getElementById('lobbyPlayerList'),
-    leaveLobbyBtn: document.getElementById('leaveLobby')
+    leaveLobbyBtn: document.getElementById('leaveLobby'),
+    leaderboardList: document.getElementById('leaderboardList'),
+    leaderboardSection: document.getElementById('leaderboardSection')
 };
 
 let myUsername = null;
@@ -90,11 +92,18 @@ function initializeEventListeners() {
     });
     
     elements.joinLobbyBtn.addEventListener('click', () => {
-        const lobbyId = elements.lobbyCodeInput.value.trim().toUpperCase();
-        if (lobbyId) {
-            socket.emit('joinLobby', lobbyId);
+        const joinLobbyInput = document.getElementById('joinLobbyInput');
+        if (joinLobbyInput.style.display === 'none') {
+            joinLobbyInput.style.display = 'block';
+            elements.lobbyCodeInput.focus();
         } else {
-            showMessage('Please enter a lobby code');
+            const lobbyId = elements.lobbyCodeInput.value.trim().toUpperCase();
+            if (lobbyId) {
+                socket.emit('joinLobby', lobbyId);
+                joinLobbyInput.style.display = 'none';
+            } else {
+                showMessage('Please enter a lobby code');
+            }
         }
     });
     
@@ -384,6 +393,66 @@ function handleUsernameError(message) {
     elements.usernameInput.value = '';
 }
 
+// Add this function to update the leaderboard display
+async function updateLeaderboard() {
+    if (!window.leaderboard || !elements.leaderboardList) return;
+    
+    try {
+        // Clear the leaderboard
+        elements.leaderboardList.innerHTML = '';
+
+        // If user is not authenticated, show sign-in message
+        if (!window.leaderboard.isUserAuthenticated()) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('leaderboard-message');
+            messageDiv.innerHTML = `
+                <p>Sign in with Google to:</p>
+                <ul>
+                    <li>Track your high scores</li>
+                    <li>Compete on the leaderboard</li>
+                    <li>Save your game statistics</li>
+                </ul>
+            `;
+            elements.leaderboardList.appendChild(messageDiv);
+            return;
+        }
+
+        // Get and display top players
+        const topPlayers = await window.leaderboard.getTopPlayers(10);
+        
+        topPlayers.forEach((player, index) => {
+            const entry = document.createElement('div');
+            entry.classList.add('leaderboard-entry');
+            
+            const rank = document.createElement('span');
+            rank.classList.add('rank');
+            rank.textContent = `#${index + 1}`;
+            
+            const username = document.createElement('span');
+            username.classList.add('username');
+            username.textContent = player.username;
+            
+            const score = document.createElement('span');
+            score.classList.add('score');
+            score.textContent = `High Score: ${player.highScore}`;
+            
+            const stats = document.createElement('span');
+            stats.classList.add('stats');
+            stats.textContent = `Games: ${player.totalGames}`;
+            
+            entry.appendChild(rank);
+            entry.appendChild(username);
+            entry.appendChild(score);
+            entry.appendChild(stats);
+            
+            elements.leaderboardList.appendChild(entry);
+        });
+    } catch (error) {
+        console.error('Error updating leaderboard:', error);
+    }
+}
+
+// Modify handleUsernameSet to update leaderboard when username is set
 function handleUsernameSet(username) {
     myUsername = username;
     elements.usernameInput.value = username;
@@ -391,6 +460,11 @@ function handleUsernameSet(username) {
     elements.joinGameButton.style.display = 'none';
     elements.changeUsernameButton.style.display = 'inline';
     elements.lobbyControls.style.display = 'block';
+    
+    // Update leaderboard when username is set
+    if (window.leaderboard) {
+        window.leaderboard.updateLeaderboardDisplay();
+    }
     
     // Store username in localStorage
     try {
@@ -455,36 +529,84 @@ function handleGameOver() {
     isGameOver = true;
 }
 
-function handleGameWin(winnerUsername) {
-    console.log('Game win event received for winner:', winnerUsername);
+// Modify handleGameWin to update leaderboard after game ends
+function handleGameWin(winner) {
+    isGameOver = true;
+    gameInProgress = false;
+    window.gameInProgress = false;
     
-    // Disable game controls
+    console.log('Game won by:', winner);
+    
+    // Get the winner modal elements
+    const modal = document.getElementById('winnerModal');
+    const winnerName = document.getElementById('winnerName');
+    
+    // Update the modal content
+    if (modal && winnerName) {
+        winnerName.textContent = winner;
+        modal.style.display = 'block';
+    }
+    
+    // Update leaderboard for the winner
+    const leaderboard = window.getLeaderboard();
+    if (leaderboard) {
+        // Only update the winner's win count
+        console.log('Attempting to update win count for winner:', winner);
+        leaderboard.updateScore(winner)
+            .then((success) => {
+                console.log('Win update success status:', success);
+                if (success) {
+                    console.log('Win recorded successfully for', winner);
+                    // Update the leaderboard display
+                    return leaderboard.updateLeaderboardDisplay();
+                } else {
+                    console.error('Failed to record win for', winner);
+                }
+            })
+            .then(() => {
+                console.log('Leaderboard display updated');
+            })
+            .catch(error => {
+                console.error('Error in win recording process for', winner, ':', error);
+            });
+    } else {
+        console.error('Leaderboard instance not found');
+    }
+    
+    // Reset game UI elements
     elements.wordGuess.disabled = true;
     elements.submitGuess.disabled = true;
     
-    // Update modal content
-    document.getElementById('winnerName').textContent = winnerUsername;
+    // Show message
+    showMessage(`Game Over! ${winner} wins!`);
     
-    // Show the modal
-    const modal = document.getElementById('winnerModal');
-    modal.style.display = "block";
+    // Add event listener to close the modal
+    const closeSpan = document.getElementsByClassName('close')[0];
+    if (closeSpan) {
+        closeSpan.onclick = function() {
+            modal.style.display = 'none';
+        }
+    }
     
-    // Use proper event delegation instead of recreating the button
-    document.getElementById('resetGame').onclick = function() {
-        console.log('Reset game button clicked');
-        socket.emit('resetGameRequest');
-        modal.style.display = "none";
-        resetFrontendUI();
-    };
+    // Add reset game functionality
+    const resetButton = document.getElementById('resetGame');
+    if (resetButton) {
+        resetButton.onclick = function() {
+            console.log('Reset game button clicked');
+            socket.emit('resetGameRequest');
+            modal.style.display = 'none';
+            resetFrontendUI();
+        };
+    }
     
-    // Also allow clicking outside the modal to close it
+    // Close modal when clicking outside
     window.onclick = function(event) {
         if (event.target === modal) {
-            modal.style.display = "none";
+            modal.style.display = 'none';
             socket.emit('resetGameRequest');
             resetFrontendUI();
         }
-    };
+    }
 }
 
 function handleTurnUpdate(currentTurnUsername) {
@@ -565,6 +687,8 @@ function resetFrontendUI() {
         elements.lobbyCode.textContent = '';
         elements.lobbyPlayerList.innerHTML = '';
         updateLobbyControlsVisibility(false);
+        // Update leaderboard when returning to lobby
+        updateLeaderboard();
     } else {
         updateLobbyControlsVisibility(true);
     }
