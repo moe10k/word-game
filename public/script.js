@@ -9,6 +9,7 @@ const elements = {
     usernameScreen: document.getElementById('usernameScreen'),
     usernameInput: document.getElementById('usernameInput'),
     joinGameButton: document.getElementById('joinGame'),
+    changeUsernameButton: document.getElementById('changeUsername'),
     gameScreen: document.getElementById('game'),
     letterDisplay: document.getElementById('letterDisplay'),
     wordGuess: document.getElementById('wordGuess'),
@@ -46,6 +47,7 @@ function resetUsernameState() {
     elements.usernameInput.disabled = false;
     elements.usernameInput.value = '';
     elements.joinGameButton.style.display = 'inline';
+    elements.changeUsernameButton.style.display = 'none';
     
     // Hide all lobby-related elements
     elements.lobbyControls.style.display = 'none';
@@ -77,6 +79,7 @@ function initializeEventListeners() {
     elements.readyButton.addEventListener('click', handleReadyClick);
     elements.unreadyButton.addEventListener('click', handleUnreadyClick);
     elements.joinGameButton.addEventListener('click', handleJoinGameClick);
+    elements.changeUsernameButton.addEventListener('click', handleChangeUsernameClick);
     elements.wordGuess.addEventListener('input', handleWordGuessInput);
     elements.wordGuess.addEventListener('keypress', handleWordGuessKeypress);
     elements.submitGuess.addEventListener('click', handleSubmitGuessClick);
@@ -314,6 +317,34 @@ function handleJoinGameClick() {
     }
 }
 
+function handleChangeUsernameClick() {
+    const newUsername = elements.usernameInput.value.trim();
+    if (newUsername) {
+        // Reset UI state first
+        elements.usernameInput.disabled = false;
+        elements.joinGameButton.style.display = 'inline';
+        elements.changeUsernameButton.style.display = 'none';
+        elements.lobbyControls.style.display = 'none';
+        
+        // If in a lobby, leave it first
+        if (currentLobbyId) {
+            socket.emit('leaveLobby');
+        }
+        
+        // Get Firebase user if available
+        const firebaseUser = getCurrentUser();
+        
+        // Send both username and authentication information
+        socket.emit('setUsername', { 
+            username: newUsername,
+            authenticated: !!firebaseUser,
+            uid: firebaseUser ? firebaseUser.uid : null
+        });
+    } else {
+        handleUsernameError('Please enter a username');
+    }
+}
+
 let typingTimeout;
 function handleWordGuessInput() {
     if (!isGameOver) {
@@ -355,24 +386,18 @@ function handleUsernameError(message) {
 
 function handleUsernameSet(username) {
     myUsername = username;
+    elements.usernameInput.value = username;
+    elements.usernameInput.disabled = true;
+    elements.joinGameButton.style.display = 'none';
+    elements.changeUsernameButton.style.display = 'inline';
+    elements.lobbyControls.style.display = 'block';
     
-    // Save username to localStorage for session persistence
+    // Store username in localStorage
     try {
         localStorage.setItem('letterGuessGameUsername', username);
     } catch (e) {
         console.warn('Could not save username to localStorage', e);
     }
-    
-    // Update UI elements
-    elements.usernameInput.disabled = true;
-    elements.joinGameButton.style.display = 'none';
-    elements.lobbyControls.style.display = 'block';
-    elements.createLobbyBtn.disabled = false;
-    elements.joinLobbyBtn.disabled = false;
-    elements.lobbyCodeInput.disabled = false;
-    elements.playerList.style.display = 'none';  // Initially hide the player list
-    
-    showMessage('Username set successfully. Create or join a lobby to play!');
 }
 
 // When the page loads, attempt to restore the username
