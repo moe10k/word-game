@@ -36,12 +36,12 @@ body{
     height: 100%;
     z-index: -1;
     background: linear-gradient(to left, #22256b, #a43690);
-    animation: backgroundTransition 10s ease-in-out infinite;
+    animation: backgroundTransition 20s ease infinite;
 }
 
 @keyframes backgroundTransition {
-    25%, 50% { background: linear-gradient(to left, #24286a, #a33a90); } /* Pink */
-    75%, 100% { background: linear-gradient(to left, #262a75, #963384); } /* Pink */
+    0%, 100% { background: linear-gradient(to left, #22256b, #a43690); }
+    50% { background: linear-gradient(to left, #24286a, #a33a90); }
 }
 
 .circles{
